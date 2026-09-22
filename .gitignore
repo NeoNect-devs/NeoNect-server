@@ -1,0 +1,56 @@
+# Binaries
+/server
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+build/
+dist/
+
+# Test output and profiling
+*.test
+*.out
+*.prof
+*.cgo1.go
+*.cgo2.c
+_cgo_defun.c
+_cgo_gotypes.go
+_cgo_export.*
+
+# SQLite runtime files
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+storage/
+
+# IDEs and OS metadata
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# AI assistant artifacts
+.gemini/
+.claude/
+.agents/
+
+# Temporary and log files
+*.log
+*.tmp
+
+# Documentation (except README.md)
+docs/
+PROJECT.md
+go.sum
