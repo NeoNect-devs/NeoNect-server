@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"log"
 	"os"
+	"strings"
 )
 
 func loadAndDecryptMasterKey(keyPath string) ([]byte, error) {
@@ -21,10 +22,23 @@ func loadAndDecryptMasterKey(keyPath string) ([]byte, error) {
 
 func getSystemBootstrapKey() []byte {
 	const envKey = "NEONECT_BOOTSTRAP_KEY"
+	const fileEnvKey = "NEONECT_BOOTSTRAP_KEY_FILE"
+
+	if filePath, exists := os.LookupEnv(fileEnvKey); exists && filePath != "" {
+		keyData, err := os.ReadFile(filePath)
+		if err != nil {
+			log.Fatalf("Critical: Failed to read %s: %v", fileEnvKey, err)
+		}
+		keyStr := strings.TrimSpace(string(keyData))
+		if keyStr == "" {
+			log.Fatalf("Critical: %s is empty", fileEnvKey)
+		}
+		return []byte(keyStr)
+	}
 
 	keyValue, exists := os.LookupEnv(envKey)
 	if !exists || keyValue == "" {
-		log.Fatal("Critical: NEONECT_BOOTSTRAP_KEY environment variable is not set")
+		log.Fatalf("Critical: Neither %s nor %s is set", envKey, fileEnvKey)
 	}
 
 	return []byte(keyValue)

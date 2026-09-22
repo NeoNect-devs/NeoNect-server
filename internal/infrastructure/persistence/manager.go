@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -200,7 +201,6 @@ const (
 		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
 	`
-
 	Migration4 = `
 	ALTER TABLE delivery_queue ADD COLUMN message_id TEXT;
 	ALTER TABLE delivery_queue ADD COLUMN sender_device_id TEXT;
@@ -276,9 +276,31 @@ func (m *Database) Initialize(ctx context.Context) error {
 	if _, err := m.databaseConnection.ExecContext(ctx, Migration3); err != nil {
 		return err
 	}
-	if _, err := m.databaseConnection.ExecContext(ctx, Migration4); err != nil {
-		return err
+
+	for _, stmt := range strings.Split(Migration4, ";") {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+
+		if strings.HasPrefix(strings.ToUpper(stmt), "ALTER TABLE ") && strings.Contains(strings.ToUpper(stmt), " ADD COLUMN ") {
+			parts := strings.Fields(stmt)
+			if len(parts) >= 6 {
+				table := parts[2]
+				col := parts[5]
+				var count int
+				check := fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name='%s'", table, col)
+				if err := m.databaseConnection.QueryRowContext(ctx, check).Scan(&count); err == nil && count > 0 {
+					continue
+				}
+			}
+		}
+
+		if _, err := m.databaseConnection.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 
