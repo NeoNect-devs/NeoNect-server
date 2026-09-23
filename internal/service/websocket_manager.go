@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/base64"
 	"encoding/json"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -38,7 +39,10 @@ type socketConnectionManager struct {
 	protocolUpgrader websocket.Upgrader
 	activeSessions   map[string]*websocketSession
 	sessionMutex     sync.RWMutex
+	connSem          chan struct{}
 }
+
+const MaxGlobalWebSockets = 10000
 
 func NewWebSocketManager(allowedOrigins []string) WebSocketManager {
 	m := &socketConnectionManager{
@@ -57,13 +61,23 @@ func NewWebSocketManager(allowedOrigins []string) WebSocketManager {
 			},
 		},
 		activeSessions: make(map[string]*websocketSession),
+		connSem:        make(chan struct{}, MaxGlobalWebSockets),
 	}
 	return m
 }
 
 func (m *socketConnectionManager) HandleConnection(w http.ResponseWriter, r *http.Request, deviceID string) {
+	select {
+	case m.connSem <- struct{}{}:
+	default:
+		http.Error(w, "Service Unavailable: connection limit reached", http.StatusServiceUnavailable)
+		return
+	}
+
 	connection, err := m.protocolUpgrader.Upgrade(w, r, nil)
 	if err != nil {
+		<-m.connSem
+		log.Printf("WARN: WebSocket upgrade failed from %s for device %s: %v", r.RemoteAddr, deviceID, err)
 		return
 	}
 
@@ -112,6 +126,7 @@ func (m *socketConnectionManager) HandleConnection(w http.ResponseWriter, r *htt
 				delete(m.activeSessions, deviceID)
 			}
 			m.sessionMutex.Unlock()
+			<-m.connSem
 		}()
 
 		s.conn.SetReadDeadline(time.Now().Add(config.PongWait))

@@ -16,15 +16,26 @@ const banner = "\033[36m" + `
 ` + "\033[0m\n"
 
 type AppLogger struct {
-	debug bool
+	debug      bool
+	isTerminal bool
 }
 
 func newAppLogger(debug bool) *AppLogger {
-	logger := &AppLogger{
-		debug: debug,
+	isTerminal := false
+	if fileInfo, err := os.Stdout.Stat(); err == nil {
+		isTerminal = (fileInfo.Mode() & os.ModeCharDevice) != 0
 	}
 
-	fmt.Print(banner)
+	logger := &AppLogger{
+		debug:      debug,
+		isTerminal: isTerminal,
+	}
+
+	if isTerminal {
+		fmt.Print(banner)
+	} else {
+		fmt.Print(strings.ReplaceAll(strings.ReplaceAll(banner, "\033[36m", ""), "\033[0m", ""))
+	}
 
 	return logger
 }
@@ -34,7 +45,11 @@ func (l *AppLogger) printLine(level, color, format string, args ...interface{}) 
 	timestamp := time.Now().Format("15:04:05")
 
 	paddedLevel := fmt.Sprintf("%-5s", strings.ToUpper(level))
-	fmt.Fprintf(os.Stdout, "\033[90m[%s]\033[0m \033[%sm%s\033[0m %s\n", timestamp, color, paddedLevel, msg)
+	if l.isTerminal {
+		fmt.Fprintf(os.Stdout, "\033[90m[%s]\033[0m \033[%sm%s\033[0m %s\n", timestamp, color, paddedLevel, msg)
+	} else {
+		fmt.Fprintf(os.Stdout, "[%s] %s %s\n", timestamp, paddedLevel, msg)
+	}
 }
 
 func (l *AppLogger) Infof(format string, args ...interface{}) {

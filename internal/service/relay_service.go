@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"sync"
 	"time"
 )
@@ -230,6 +231,7 @@ func (m *RelayManager) dispatchDueMessages() {
 	now := time.Now().Unix()
 	items, err := m.deliveryRepository.GetDueItems(context.Background(), now)
 	if err != nil {
+		log.Printf("ERROR: Failed to query due messages in scheduler: %v", err)
 		return
 	}
 	for _, item := range items {
@@ -262,7 +264,9 @@ func (m *RelayManager) startMaintenanceLoop() {
 func (m *RelayManager) performMaintenance() {
 	ctx, cancel := context.WithTimeout(context.Background(), config.MaintenanceTimeout)
 	defer cancel()
-	_ = m.deliveryRepository.Cleanup(ctx)
+	if err := m.deliveryRepository.Cleanup(ctx); err != nil {
+		log.Printf("WARN: Maintenance cleanup failed: %v", err)
+	}
 }
 
 func (m *RelayManager) Shutdown(ctx context.Context) {
@@ -283,13 +287,7 @@ func (m *RelayManager) Shutdown(ctx context.Context) {
 
 	select {
 	case <-done:
-		if m.wsManager != nil {
-			m.wsManager.Shutdown()
-		}
 	case <-ctx.Done():
-		if m.wsManager != nil {
-			m.wsManager.Shutdown()
-		}
 		abortCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		select {
@@ -320,13 +318,17 @@ func (w *DeliveryWorker) Process(item persistence.DeliveryQueueItem) {
 	}
 
 	if retryCount > config.MaximumRetryAttempts {
-		_ = w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, now+config.TerminalRetryBackoff, 0)
+		if err := w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, now+config.TerminalRetryBackoff, 0); err != nil {
+			log.Printf("ERROR: Failed to update state for item %d after max retries: %v", item.ID, err)
+		}
 		return
 	}
 
 	if w.wsManager.DeliverMessage(item) {
 		deadline := now + config.AcknowledgmentTimeout
-		_ = w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, deadline, deadline)
+		if err := w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, deadline, deadline); err != nil {
+			log.Printf("ERROR: Failed to update state for item %d during delivery: %v", item.ID, err)
+		}
 		return
 	}
 
@@ -339,9 +341,13 @@ func (w *DeliveryWorker) Process(item persistence.DeliveryQueueItem) {
 		backoff = config.MaximumBackoffDuration
 	}
 
-	_ = w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, now+backoff, 0)
+	if err := w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, now+backoff, 0); err != nil {
+		log.Printf("ERROR: Failed to update state for item %d during backoff: %v", item.ID, err)
+	}
 
 	if item.RetryCount == 0 && w.pushAdapter != nil {
-		_ = w.pushAdapter.SendNotification(item.DeviceID, item.Payload)
+		if err := w.pushAdapter.SendNotification(item.DeviceID, item.Payload); err != nil {
+			log.Printf("WARN: Push notification failed for device %s: %v", item.DeviceID, err)
+		}
 	}
 }

@@ -37,11 +37,15 @@ type AppConfig struct {
 
 func LoadConfig() AppConfig {
 	env := strings.ToLower(GetEnvOrDefault("NEONECT_ENV", "beta"))
-	if env != "development" {
-		env = "beta"
+	switch env {
+	case "development", "beta", "production":
+		// valid environments
+	default:
+		log.Fatalf("Critical: Unsupported NEONECT_ENV: %s. Supported values are: development, beta, production", env)
 	}
+
 	debug := strings.EqualFold(GetEnvOrDefault("NEONECT_DEBUG", ""), "true")
-	if env == "beta" {
+	if env == "beta" || env == "production" {
 		debug = false
 	}
 
@@ -67,6 +71,14 @@ func LoadConfig() AppConfig {
 	dbDir := GetEnvOrDefault("NEONECT_DB_DIR", filepath.Join(storageRoot, "database"))
 	keyDir := GetEnvOrDefault("NEONECT_KEY_DIR", filepath.Join(storageRoot, "keys"))
 
+	dbNameDefault := DbBetaName
+	if env == "production" {
+		dbNameDefault = "neonect_v1_production"
+	}
+	if env == "development" {
+		dbNameDefault = "neonect_v1_development"
+	}
+
 	return AppConfig{
 		Environment:       env,
 		Debug:             debug,
@@ -78,7 +90,7 @@ func LoadConfig() AppConfig {
 		TrustedProxies:    trustedProxies,
 
 		IntegritySeed:     GetEnvOrDefault("NEONECT_INTEGRITY_SEED", IntegrityCheckSeed),
-		DatabaseName:      GetEnvOrDefault("NEONECT_DB_NAME", DbBetaName),
+		DatabaseName:      GetEnvOrDefault("NEONECT_DB_NAME", dbNameDefault),
 		ReadTimeout:       time.Duration(GetEnvInt("NEONECT_READ_TIMEOUT", 15)) * time.Second,
 		WriteTimeout:      time.Duration(GetEnvInt("NEONECT_WRITE_TIMEOUT", 15)) * time.Second,
 		IdleTimeout:       time.Duration(GetEnvInt("NEONECT_IDLE_TIMEOUT", 60)) * time.Second,
@@ -114,6 +126,8 @@ func GetProjectRoot() string {
 			log.Fatalf("Failed to get working directory: %v", err)
 		}
 
+		// In non-development environments, if no go.mod is found, fallback to the executable directory or /opt/neonect.
+		// However, it's safer to just return the working directory and let explicit config paths take precedence.
 		for {
 			if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
 				projectRoot = dir
@@ -122,6 +136,12 @@ func GetProjectRoot() string {
 
 			parent := filepath.Dir(dir)
 			if parent == dir {
+				if os.Getenv("NEONECT_ENV") == "production" || os.Getenv("NEONECT_ENV") == "beta" {
+					// Don't crash, just use current working directory or /opt/neonect
+					cwd, _ := os.Getwd()
+					projectRoot = cwd
+					return
+				}
 				log.Fatalf("Critical: Could not find project root (go.mod). Storage cannot be resolved safely.")
 			}
 			dir = parent

@@ -122,6 +122,9 @@ func (app *App) Close(ctx context.Context) {
 			app.Handlers.RateLimiter.Stop()
 		}
 	}
+	if app.SessionRepo != nil {
+		app.SessionRepo.Shutdown()
+	}
 	if app.DB != nil {
 		_ = app.DB.Close()
 	}
@@ -137,7 +140,7 @@ func (app *App) ensureStoragePath() {
 			app.Logger.Fatalf("Failed to resolve absolute path for %s: %v", dir, err)
 		}
 
-		if app.Config.Environment != "development" && !strings.HasPrefix(absDir, storageRoot) {
+		if app.Config.Environment == "beta" && !strings.HasPrefix(absDir, storageRoot) {
 			app.Logger.Fatalf("Critical Misconfiguration: Storage directory %s is outside the project root storage (%s).", absDir, storageRoot)
 		}
 

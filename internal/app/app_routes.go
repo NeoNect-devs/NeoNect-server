@@ -84,7 +84,7 @@ func (app *App) CorsMiddleware(next http.Handler) http.Handler {
 		if origin := r.Header.Get(headerOrigin); origin != "" {
 			allowed := false
 			for _, o := range app.Config.AllowedOrigins {
-				if o == origin {
+				if o == "*" || o == origin {
 					allowed = true
 					break
 				}

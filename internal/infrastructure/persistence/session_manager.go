@@ -18,10 +18,43 @@ type cachedSession struct {
 type sqlSessionRepository struct {
 	db                 *sql.DB
 	activeSessionCache sync.Map
+	stopChan           chan struct{}
+	shutdownOnce       sync.Once
 }
 
 func NewSessionRepository(db *sql.DB) SessionRepository {
-	return &sqlSessionRepository{db: db}
+	repo := &sqlSessionRepository{
+		db:       db,
+		stopChan: make(chan struct{}),
+	}
+	go repo.evictionLoop()
+	return repo
+}
+
+func (m *sqlSessionRepository) evictionLoop() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			now := time.Now().Unix()
+			m.activeSessionCache.Range(func(key, value interface{}) bool {
+				cs := value.(cachedSession)
+				if now > cs.expiresAt {
+					m.activeSessionCache.Delete(key)
+				}
+				return true
+			})
+		case <-m.stopChan:
+			return
+		}
+	}
+}
+
+func (m *sqlSessionRepository) Shutdown() {
+	m.shutdownOnce.Do(func() {
+		close(m.stopChan)
+	})
 }
 
 func (m *sqlSessionRepository) CreateSession(ctx context.Context, usernameHash string, sessionToken string) error {

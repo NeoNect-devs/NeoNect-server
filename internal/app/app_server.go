@@ -67,6 +67,10 @@ func (app *App) handleGracefulShutdown(sigChan chan os.Signal, srv *http.Server)
 	ctx, cancel := context.WithTimeout(context.Background(), config.ShutdownTimeout)
 	defer cancel()
 
+	if app.Handlers != nil && app.Handlers.WSManager != nil {
+		app.Handlers.WSManager.Shutdown()
+	}
+
 	if err := srv.Shutdown(ctx); err != nil {
 		app.Logger.Warnf("Server forced to shutdown: %v", err)
 	}
