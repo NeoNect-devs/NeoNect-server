@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"NeoNect/internal/logger"
 	"NeoNect/security"
 	"context"
 	"database/sql"
@@ -25,7 +26,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 }
 
 func TestSessionRepository_Shutdown(t *testing.T) {
-	repo := NewSessionRepository(nil)
+	repo := NewSessionRepository(nil, logger.New(true))
 	repo.Shutdown() // Should not block or panic
 }
 
@@ -33,7 +34,7 @@ func TestSessionRepository_CacheSecurity(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	repo := NewSessionRepository(db)
+	repo := NewSessionRepository(db, logger.New(true))
 	defer repo.Shutdown()
 	sqlRepo := repo.(*sqlSessionRepository)
 
@@ -117,7 +118,7 @@ func TestSessionRepository_CacheSecurity(t *testing.T) {
 func TestSessionRepository_MultipleSessions(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
-	repo := NewSessionRepository(db)
+	repo := NewSessionRepository(db, logger.New(true))
 	defer repo.Shutdown()
 
 	ctx := context.Background()
@@ -155,7 +156,7 @@ func TestSessionRepository_MultipleSessions(t *testing.T) {
 func TestSessionRepository_ConcurrentLookups(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
-	repo := NewSessionRepository(db)
+	repo := NewSessionRepository(db, logger.New(true))
 	defer repo.Shutdown()
 	ctx := context.Background()
 	usernameHash := security.ComputeHash("testuser3")
@@ -182,7 +183,7 @@ func TestSessionRepository_ConcurrentLookups(t *testing.T) {
 func TestSessionRepository_ExpiredSessionRemoved(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
-	repo := NewSessionRepository(db)
+	repo := NewSessionRepository(db, logger.New(true))
 	defer repo.Shutdown()
 	sqlRepo := repo.(*sqlSessionRepository)
 
@@ -218,7 +219,7 @@ func TestSessionRepository_ExpiredSessionRemoved(t *testing.T) {
 func TestSessionRepository_DatabaseCleanup(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
-	repo := NewSessionRepository(db)
+	repo := NewSessionRepository(db, logger.New(true))
 	defer repo.Shutdown()
 	sqlRepo := repo.(*sqlSessionRepository)
 
@@ -276,7 +277,7 @@ func TestSessionRepository_DatabaseCleanup(t *testing.T) {
 func TestSessionRepository_CleanupFailureHandling(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
-	repo := NewSessionRepository(db)
+	repo := NewSessionRepository(db, logger.New(true))
 	defer repo.Shutdown()
 	sqlRepo := repo.(*sqlSessionRepository)
 
@@ -293,7 +294,7 @@ func TestSessionRepository_CleanupFailureHandling(t *testing.T) {
 func TestSessionRepository_ShutdownDuringCleanup(t *testing.T) {
 	db := setupTestDB(t)
 	// We do not defer db.Close() here initially because we want to see if Shutdown() correctly waits.
-	repo := NewSessionRepository(db)
+	repo := NewSessionRepository(db, logger.New(true))
 
 	// Since evictionLoop is running, we can just call Shutdown.
 	// It should return without hanging indefinitely, and it shouldn't leave goroutines.
@@ -315,7 +316,7 @@ func TestSessionRepository_ShutdownDuringCleanup(t *testing.T) {
 func TestSessionRepository_CleanupLogoutConcurrency(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
-	repo := NewSessionRepository(db)
+	repo := NewSessionRepository(db, logger.New(true))
 	defer repo.Shutdown()
 	sqlRepo := repo.(*sqlSessionRepository)
 

@@ -4,6 +4,7 @@ import (
 	"NeoNect/internal/api"
 	"NeoNect/internal/config"
 	"NeoNect/internal/infrastructure/persistence"
+	"NeoNect/internal/logger"
 	"NeoNect/internal/service"
 	"NeoNect/security"
 	"context"
@@ -25,7 +26,7 @@ type App struct {
 	SessionRepo persistence.SessionRepository
 	Handlers    *api.HandlerManager
 	Config      config.AppConfig
-	Logger      *AppLogger
+	Logger      logger.Logger
 }
 
 func (app *App) bootstrap(secretPath string) {
@@ -51,7 +52,7 @@ func (app *App) bootstrap(secretPath string) {
 	app.DB = dbManager
 
 	userRepo := persistence.NewUserRepository(dbManager.DB())
-	sessionRepo := persistence.NewSessionRepository(dbManager.DB())
+	sessionRepo := persistence.NewSessionRepository(dbManager.DB(), app.Logger)
 	deviceRepo := persistence.NewDeviceRepository(dbManager.DB())
 	queueRepo := persistence.NewDeliveryQueueRepository(dbManager.DB())
 	integrityRepo := persistence.NewIntegrityRepository(dbManager.DB())
@@ -62,12 +63,12 @@ func (app *App) bootstrap(secretPath string) {
 	app.SessionRepo = sessionRepo
 
 	notifier := service.NewNoopNotifier()
-	wsManager := service.NewWebSocketManager(app.Config.AllowedOrigins)
-	pushAdapter := service.NewPushAdapter()
+	wsManager := service.NewWebSocketManager(app.Config.AllowedOrigins, app.Logger)
+	pushAdapter := service.NewPushAdapter(app.Logger)
 
 	authSvc := service.NewAuthService(userRepo, sessionRepo)
 	deviceSvc := service.NewDeviceService(userRepo, deviceRepo, vault, app.Config.MaxDevicesPerUser)
-	rs := service.NewRelayService(userRepo, deviceRepo, queueRepo, friendRepo, notifier, wsManager, pushAdapter)
+	rs := service.NewRelayService(userRepo, deviceRepo, queueRepo, friendRepo, notifier, wsManager, pushAdapter, app.Logger)
 	friendSvc := service.NewFriendService(userRepo, friendRepo)
 	prekeySvc := service.NewPrekeyService(deviceRepo, prekeyRepo, friendRepo, vault)
 
@@ -78,7 +79,7 @@ func NewApp(secretPath string) *App {
 	appConfig := config.LoadConfig()
 	app := &App{
 		Config: appConfig,
-		Logger: newAppLogger(appConfig.Debug),
+		Logger: logger.New(appConfig.Debug),
 	}
 	app.bootstrap(secretPath)
 	return app

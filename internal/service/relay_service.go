@@ -3,11 +3,11 @@ package service
 import (
 	"NeoNect/internal/config"
 	"NeoNect/internal/infrastructure/persistence"
+	"NeoNect/internal/logger"
 	"NeoNect/security"
 	"context"
 	"database/sql"
 	"errors"
-	"log"
 	"sync"
 	"time"
 )
@@ -61,6 +61,7 @@ type RelayManager struct {
 	maintenancePeriod  time.Duration
 	wsManager          WebSocketManager
 	workerWg           sync.WaitGroup
+	logger             logger.Logger
 }
 
 func NewRelayService(
@@ -71,6 +72,7 @@ func NewRelayService(
 	n RealtimeNotifier,
 	ws WebSocketManager,
 	push PushAdapter,
+	l logger.Logger,
 ) RelayService {
 	manager := &RelayManager{
 		userRepository:     uRepo,
@@ -82,10 +84,12 @@ func NewRelayService(
 		messageTTL:         config.DefaultMessageTTL,
 		maintenancePeriod:  config.DefaultCleanupInterval,
 		wsManager:          ws,
+		logger:             l,
 	}
 	manager.worker = &DeliveryWorker{
 		deliveryRepository: qRepo,
 		wsManager:          ws,
+		logger:             l,
 		pushAdapter:        push,
 	}
 	go manager.startMaintenanceLoop()
@@ -238,7 +242,7 @@ func (m *RelayManager) dispatchDueMessages() {
 	now := time.Now().Unix()
 	items, err := m.deliveryRepository.GetDueItems(context.Background(), now)
 	if err != nil {
-		log.Printf("ERROR: Failed to query due messages in scheduler: %v", err)
+		m.logger.Errorf("Failed to query due messages in scheduler: %v", err)
 		return
 	}
 	for _, item := range items {
@@ -272,7 +276,7 @@ func (m *RelayManager) performMaintenance() {
 	ctx, cancel := context.WithTimeout(context.Background(), config.MaintenanceTimeout)
 	defer cancel()
 	if err := m.deliveryRepository.Cleanup(ctx); err != nil {
-		log.Printf("WARN: Maintenance cleanup failed: %v", err)
+		m.logger.Warnf("Maintenance cleanup failed: %v", err)
 	}
 }
 
@@ -308,6 +312,7 @@ type DeliveryWorker struct {
 	deliveryRepository persistence.DeliveryQueueRepository
 	wsManager          WebSocketManager
 	pushAdapter        PushAdapter
+	logger             logger.Logger
 }
 
 func (w *DeliveryWorker) Process(item persistence.DeliveryQueueItem) {
@@ -326,7 +331,7 @@ func (w *DeliveryWorker) Process(item persistence.DeliveryQueueItem) {
 
 	if retryCount > config.MaximumRetryAttempts {
 		if err := w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, now+config.TerminalRetryBackoff, 0); err != nil {
-			log.Printf("ERROR: Failed to update state for item %d after max retries: %v", item.ID, err)
+			w.logger.Errorf("Failed to update state for item %d after max retries: %v", item.ID, err)
 		}
 		return
 	}
@@ -334,7 +339,7 @@ func (w *DeliveryWorker) Process(item persistence.DeliveryQueueItem) {
 	if w.wsManager.DeliverMessage(item) {
 		deadline := now + config.AcknowledgmentTimeout
 		if err := w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, deadline, deadline); err != nil {
-			log.Printf("ERROR: Failed to update state for item %d during delivery: %v", item.ID, err)
+			w.logger.Errorf("Failed to update state for item %d during delivery: %v", item.ID, err)
 		}
 		return
 	}
@@ -349,12 +354,12 @@ func (w *DeliveryWorker) Process(item persistence.DeliveryQueueItem) {
 	}
 
 	if err := w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, now+backoff, 0); err != nil {
-		log.Printf("ERROR: Failed to update state for item %d during backoff: %v", item.ID, err)
+		w.logger.Errorf("Failed to update state for item %d during backoff: %v", item.ID, err)
 	}
 
 	if item.RetryCount == 0 && w.pushAdapter != nil {
 		if err := w.pushAdapter.SendNotification(item.DeviceID, item.Payload); err != nil {
-			log.Printf("WARN: Push notification failed for device %s: %v", item.DeviceID, err)
+			w.logger.Warnf("Push notification failed for device %s: %v", item.DeviceID, err)
 		}
 	}
 }

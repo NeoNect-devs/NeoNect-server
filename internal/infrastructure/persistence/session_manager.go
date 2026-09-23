@@ -2,11 +2,11 @@ package persistence
 
 import (
 	"NeoNect/internal/config"
+	"NeoNect/internal/logger"
 	"NeoNect/security"
 	"context"
 	"database/sql"
 	"errors"
-	"log"
 	"sync"
 	"time"
 )
@@ -22,12 +22,14 @@ type sqlSessionRepository struct {
 	stopChan           chan struct{}
 	shutdownOnce       sync.Once
 	wg                 sync.WaitGroup
+	logger             logger.Logger
 }
 
-func NewSessionRepository(db *sql.DB) SessionRepository {
+func NewSessionRepository(db *sql.DB, l logger.Logger) SessionRepository {
 	repo := &sqlSessionRepository{
 		db:       db,
 		stopChan: make(chan struct{}),
+		logger:   l,
 	}
 	repo.wg.Add(1)
 	go repo.evictionLoop()
@@ -49,11 +51,11 @@ func (m *sqlSessionRepository) evictionLoop() {
 
 			if err != nil {
 				if lastErr == nil || lastErr.Error() != err.Error() {
-					log.Printf("Session cleanup failed: %v", err)
+					m.logger.Errorf("Session cleanup failed: %v", err)
 					lastErr = err
 				}
 			} else if lastErr != nil {
-				log.Printf("Session cleanup recovered")
+				m.logger.Infof("Session cleanup recovered")
 				lastErr = nil
 			}
 		case <-m.stopChan:

@@ -1,9 +1,9 @@
 package service
 
 import (
+	"NeoNect/internal/logger"
 	"encoding/base64"
 	"encoding/json"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -40,11 +40,12 @@ type socketConnectionManager struct {
 	activeSessions   map[string]*websocketSession
 	sessionMutex     sync.RWMutex
 	connSem          chan struct{}
+	logger           logger.Logger
 }
 
 const MaxGlobalWebSockets = 10000
 
-func NewWebSocketManager(allowedOrigins []string) WebSocketManager {
+func NewWebSocketManager(allowedOrigins []string, l logger.Logger) WebSocketManager {
 	m := &socketConnectionManager{
 		protocolUpgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
@@ -62,6 +63,7 @@ func NewWebSocketManager(allowedOrigins []string) WebSocketManager {
 		},
 		activeSessions: make(map[string]*websocketSession),
 		connSem:        make(chan struct{}, MaxGlobalWebSockets),
+		logger:         l,
 	}
 	return m
 }
@@ -77,7 +79,7 @@ func (m *socketConnectionManager) HandleConnection(w http.ResponseWriter, r *htt
 	connection, err := m.protocolUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		<-m.connSem
-		log.Printf("WARN: WebSocket upgrade failed from %s for device %s: %v", r.RemoteAddr, deviceID, err)
+		m.logger.Warnf("WebSocket upgrade failed from %s for device %s: %v", r.RemoteAddr, deviceID, err)
 		return
 	}
 

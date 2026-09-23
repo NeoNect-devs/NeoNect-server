@@ -2,6 +2,7 @@ package app
 
 import (
 	"NeoNect/internal/config"
+	"NeoNect/internal/logger"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,7 +17,7 @@ func TestEnsureStoragePath_EnvironmentGating(t *testing.T) {
 				DatabaseDir:  os.Getenv("CRASHER_DB_DIR"),
 				MasterKeyDir: os.Getenv("CRASHER_DB_DIR"),
 			},
-			Logger: &AppLogger{}, // Minimal mock, might panic on Fatalf if uninitialized, but it's okay because we check for non-zero exit
+			Logger: logger.New(true), // Minimal mock, might panic on Fatalf if uninitialized, but it's okay because we check for non-zero exit
 		}
 		// override GetStoragePath via NEONECT_STORAGE_ROOT
 		app.ensureStoragePath()

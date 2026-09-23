@@ -1,6 +1,7 @@
 package websocket_test
 
 import (
+	"NeoNect/internal/logger"
 	"NeoNect/internal/service"
 	"net/http"
 	"net/http/httptest"
@@ -45,7 +46,7 @@ func TestWebSocket_CheckOrigin(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			wsManager := service.NewWebSocketManager(tc.allowedOrigins)
+			wsManager := service.NewWebSocketManager(tc.allowedOrigins, logger.New(true))
 
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				wsManager.HandleConnection(w, r, "test-device")
