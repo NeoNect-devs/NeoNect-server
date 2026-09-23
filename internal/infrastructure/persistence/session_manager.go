@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"sync"
 	"time"
 )
@@ -20,6 +21,7 @@ type sqlSessionRepository struct {
 	activeSessionCache sync.Map
 	stopChan           chan struct{}
 	shutdownOnce       sync.Once
+	wg                 sync.WaitGroup
 }
 
 func NewSessionRepository(db *sql.DB) SessionRepository {
@@ -27,6 +29,7 @@ func NewSessionRepository(db *sql.DB) SessionRepository {
 		db:       db,
 		stopChan: make(chan struct{}),
 	}
+	repo.wg.Add(1)
 	go repo.evictionLoop()
 	return repo
 }
@@ -34,26 +37,54 @@ func NewSessionRepository(db *sql.DB) SessionRepository {
 func (m *sqlSessionRepository) evictionLoop() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
+	defer m.wg.Done()
+
+	var lastErr error
 	for {
 		select {
 		case <-ticker.C:
-			now := time.Now().Unix()
-			m.activeSessionCache.Range(func(key, value interface{}) bool {
-				cs := value.(cachedSession)
-				if now > cs.expiresAt {
-					m.activeSessionCache.Delete(key)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			err := m.CleanupExpiredSessions(ctx)
+			cancel()
+
+			if err != nil {
+				if lastErr == nil || lastErr.Error() != err.Error() {
+					log.Printf("Session cleanup failed: %v", err)
+					lastErr = err
 				}
-				return true
-			})
+			} else if lastErr != nil {
+				log.Printf("Session cleanup recovered")
+				lastErr = nil
+			}
 		case <-m.stopChan:
 			return
 		}
 	}
 }
 
+func (m *sqlSessionRepository) CleanupExpiredSessions(ctx context.Context) error {
+	now := time.Now().Unix()
+	m.activeSessionCache.Range(func(key, value interface{}) bool {
+		cs := value.(cachedSession)
+		if now > cs.expiresAt {
+			m.activeSessionCache.Delete(key)
+		}
+		return true
+	})
+
+	if m.db == nil {
+		return nil
+	}
+
+	threshold := time.Now().Add(-config.SessionDuration).UTC().Format("2006-01-02 15:04:05")
+	_, err := m.db.ExecContext(ctx, Queries.CleanupSess, config.BlockTypeSession, threshold)
+	return err
+}
+
 func (m *sqlSessionRepository) Shutdown() {
 	m.shutdownOnce.Do(func() {
 		close(m.stopChan)
+		m.wg.Wait()
 	})
 }
 

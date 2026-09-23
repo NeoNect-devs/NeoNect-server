@@ -157,7 +157,6 @@ func TestSessionRepository_ConcurrentLookups(t *testing.T) {
 	defer db.Close()
 	repo := NewSessionRepository(db)
 	defer repo.Shutdown()
-
 	ctx := context.Background()
 	usernameHash := security.ComputeHash("testuser3")
 	db.ExecContext(ctx, Queries.CreateUser, usernameHash, []byte("blob"))
@@ -213,5 +212,144 @@ func TestSessionRepository_ExpiredSessionRemoved(t *testing.T) {
 	// Should be removed from cache
 	if _, ok := sqlRepo.activeSessionCache.Load(hashedToken); ok {
 		t.Errorf("Expected expired session to be removed from cache")
+	}
+}
+
+func TestSessionRepository_DatabaseCleanup(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewSessionRepository(db)
+	defer repo.Shutdown()
+	sqlRepo := repo.(*sqlSessionRepository)
+
+	ctx := context.Background()
+	usernameHash := security.ComputeHash("testuser5")
+	db.ExecContext(ctx, Queries.CreateUser, usernameHash, []byte("blob"))
+
+	// Create a session
+	token := "cleanup_token"
+	repo.CreateSession(ctx, usernameHash, token)
+	hashedToken := security.ComputeHash(token)
+
+	// Manually set created_at in the past (beyond config.SessionDuration)
+	oldTime := time.Now().Add(-25 * time.Hour).UTC().Format("2006-01-02 15:04:05")
+	_, err := db.ExecContext(ctx, "UPDATE user_blocks SET created_at = ? WHERE sub_block_id = ?", oldTime, hashedToken)
+	if err != nil {
+		t.Fatalf("Failed to update created_at: %v", err)
+	}
+
+	// Verify it still exists in the DB before cleanup
+	var count int
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM user_blocks WHERE sub_block_id = ?", hashedToken).Scan(&count)
+	if count != 1 {
+		t.Fatalf("Expected 1 session in DB, got %d", count)
+	}
+
+	// Run cleanup
+	err = sqlRepo.CleanupExpiredSessions(ctx)
+	if err != nil {
+		t.Fatalf("Cleanup failed: %v", err)
+	}
+
+	// Verify it's removed from DB
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM user_blocks WHERE sub_block_id = ?", hashedToken).Scan(&count)
+	if count != 0 {
+		t.Fatalf("Expected session to be cleaned up from DB, but it remains")
+	}
+
+	// Create a valid session to ensure it's not deleted
+	tokenValid := "valid_token"
+	repo.CreateSession(ctx, usernameHash, tokenValid)
+	hashedTokenValid := security.ComputeHash(tokenValid)
+
+	err = sqlRepo.CleanupExpiredSessions(ctx)
+	if err != nil {
+		t.Fatalf("Cleanup failed: %v", err)
+	}
+
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM user_blocks WHERE sub_block_id = ?", hashedTokenValid).Scan(&count)
+	if count != 1 {
+		t.Fatalf("Expected valid session to remain in DB, but it was cleaned up")
+	}
+}
+
+func TestSessionRepository_CleanupFailureHandling(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewSessionRepository(db)
+	defer repo.Shutdown()
+	sqlRepo := repo.(*sqlSessionRepository)
+
+	// Pass a cancelled context to simulate a DB timeout or closed connection
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := sqlRepo.CleanupExpiredSessions(ctx)
+	if err == nil {
+		t.Errorf("Expected cleanup to fail with a cancelled context, got nil")
+	}
+}
+
+func TestSessionRepository_ShutdownDuringCleanup(t *testing.T) {
+	db := setupTestDB(t)
+	// We do not defer db.Close() here initially because we want to see if Shutdown() correctly waits.
+	repo := NewSessionRepository(db)
+
+	// Since evictionLoop is running, we can just call Shutdown.
+	// It should return without hanging indefinitely, and it shouldn't leave goroutines.
+	done := make(chan struct{})
+	go func() {
+		repo.Shutdown()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success
+	case <-time.After(2 * time.Second):
+		t.Fatalf("Shutdown() hung indefinitely")
+	}
+	db.Close()
+}
+
+func TestSessionRepository_CleanupLogoutConcurrency(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+	repo := NewSessionRepository(db)
+	defer repo.Shutdown()
+	sqlRepo := repo.(*sqlSessionRepository)
+
+	ctx := context.Background()
+	usernameHash := security.ComputeHash("testuser_concurrent")
+	db.ExecContext(ctx, Queries.CreateUser, usernameHash, []byte("blob"))
+
+	token := "concurrent_logout_token"
+	repo.CreateSession(ctx, usernameHash, token)
+	hashedToken := security.ComputeHash(token)
+
+	// Make the session old
+	oldTime := time.Now().Add(-25 * time.Hour).UTC().Format("2006-01-02 15:04:05")
+	db.ExecContext(ctx, "UPDATE user_blocks SET created_at = ? WHERE sub_block_id = ?", oldTime, hashedToken)
+
+	// Concurrently delete and cleanup
+	errCh := make(chan error, 2)
+	go func() {
+		errCh <- repo.DeleteSession(ctx, token)
+	}()
+	go func() {
+		errCh <- sqlRepo.CleanupExpiredSessions(ctx)
+	}()
+
+	for i := 0; i < 2; i++ {
+		if err := <-errCh; err != nil {
+			t.Errorf("Concurrent operation failed: %v", err)
+		}
+	}
+
+	// Verify session is gone
+	var count int
+	db.QueryRowContext(ctx, "SELECT COUNT(*) FROM user_blocks WHERE sub_block_id = ?", hashedToken).Scan(&count)
+	if count != 0 {
+		t.Errorf("Expected session to be completely removed")
 	}
 }

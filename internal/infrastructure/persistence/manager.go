@@ -36,6 +36,7 @@ var Queries = struct {
 	GetLastSequence        string
 	GetDueItems            string
 	CleanupQueue           string
+	CleanupSess            string
 	CreateFriendship       string
 	CheckFriendship        string
 	VerifyDb               string
@@ -72,6 +73,7 @@ var Queries = struct {
 	GetLastSequence:        "SELECT COALESCE(MAX(sequence), 0) FROM delivery_queue WHERE device_id = ?",
 	GetDueItems:            "SELECT id, device_id, payload, sequence, retry_count, next_retry, ack_deadline, message_id, sender_device_id, protocol_version FROM delivery_queue WHERE next_retry <= ? ORDER BY next_retry ASC LIMIT 100",
 	CleanupQueue:           "DELETE FROM delivery_queue WHERE expiry <= ?",
+	CleanupSess:            "DELETE FROM user_blocks WHERE block_type = ? AND created_at < ?",
 	CreateFriendship:       "INSERT INTO friendships (user_id_1, user_id_2) VALUES (?, ?)",
 	CheckFriendship:        "SELECT EXISTS(SELECT 1 FROM friendships WHERE user_id_1 = ? AND user_id_2 = ?)",
 	VerifyDb:               "SELECT 1",
@@ -122,6 +124,7 @@ const (
 	);
 	CREATE INDEX IF NOT EXISTS idx_user_silo_time ON user_blocks(user_id, block_type, sub_block_id, created_at DESC);
 	CREATE INDEX IF NOT EXISTS idx_session_lookup ON user_blocks(block_type, sub_block_id);
+	CREATE INDEX IF NOT EXISTS idx_session_cleanup ON user_blocks(block_type, created_at);
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_device_unique ON user_blocks(block_type, sub_block_id);
 	CREATE INDEX IF NOT EXISTS idx_queue_device ON delivery_queue(device_id);
 	CREATE INDEX IF NOT EXISTS idx_queue_retry ON delivery_queue(next_retry);
