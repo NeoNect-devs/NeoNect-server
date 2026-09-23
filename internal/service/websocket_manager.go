@@ -53,7 +53,7 @@ func NewWebSocketManager(allowedOrigins []string) WebSocketManager {
 					return true
 				}
 				for _, allowed := range allowedOrigins {
-					if allowed == "*" || allowed == origin {
+					if allowed == origin {
 						return true
 					}
 				}
