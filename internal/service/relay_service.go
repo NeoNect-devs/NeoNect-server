@@ -18,6 +18,7 @@ var (
 	ErrRecipientDeviceNotFound  = errors.New("recipient device not found")
 	ErrInvalidRecipientDeviceID = errors.New("invalid recipient device id")
 	ErrDuplicateConflict        = errors.New("duplicate message conflict")
+	ErrMailboxQuotaExceeded     = errors.New("mailbox quota exceeded")
 )
 
 type MessageEnvelope struct {
@@ -130,6 +131,9 @@ func (m *RelayManager) Send(ctx context.Context, senderUID int64, toUsername str
 	m.stateMutex.Unlock()
 
 	if err := m.deliveryRepository.FanOutMessage(ctx, devices, payload, ttl); err != nil {
+		if errors.Is(err, persistence.ErrMailboxQuotaExceeded) {
+			return ErrMailboxQuotaExceeded
+		}
 		return err
 	}
 
@@ -184,6 +188,9 @@ func (m *RelayManager) SendEnvelope(ctx context.Context, senderUID int64, envelo
 	if err := m.deliveryRepository.EnqueueEnvelope(ctx, envelope.MessageID, envelope.SenderDeviceID, envelope.RecipientDeviceID, envelope.ProtocolVersion, envelope.Ciphertext, ttl, sequence); err != nil {
 		if errors.Is(err, persistence.ErrDuplicateConflict) {
 			return ErrDuplicateConflict
+		}
+		if errors.Is(err, persistence.ErrMailboxQuotaExceeded) {
+			return ErrMailboxQuotaExceeded
 		}
 		return err
 	}

@@ -109,7 +109,7 @@ func (hm *HandlerManager) SendRelayMessage(w http.ResponseWriter, r *http.Reques
 				hm.sendError(w, ErrNotFound, http.StatusNotFound)
 			} else if errors.Is(err, service.ErrDuplicateConflict) {
 				hm.sendError(w, "conflict", http.StatusConflict)
-			} else if err.Error() == "mailbox quota exceeded" {
+			} else if errors.Is(err, service.ErrMailboxQuotaExceeded) {
 				hm.sendError(w, "quota exceeded", http.StatusRequestEntityTooLarge)
 			} else {
 				hm.sendError(w, ErrServer, http.StatusInternalServerError)
@@ -124,6 +124,8 @@ func (hm *HandlerManager) SendRelayMessage(w http.ResponseWriter, r *http.Reques
 				hm.sendError(w, ErrNotFound, http.StatusNotFound)
 			} else if errors.Is(err, service.ErrRecipientNoDevices) {
 				hm.sendError(w, "recipient has no registered devices", http.StatusUnprocessableEntity)
+			} else if errors.Is(err, service.ErrMailboxQuotaExceeded) {
+				hm.sendError(w, "quota exceeded", http.StatusRequestEntityTooLarge)
 			} else {
 				hm.sendError(w, ErrServer, http.StatusInternalServerError)
 			}

@@ -33,9 +33,12 @@ func (m *sqlDeliveryQueueRepository) Enqueue(ctx context.Context, deviceID strin
 var ErrDuplicateConflict = errors.New("duplicate message ID with incompatible envelope")
 var ErrMailboxQuotaExceeded = errors.New("mailbox quota exceeded")
 
+const (
+	maxMessages     = 1000
+	maxMailboxBytes = 50 * 1024 * 1024 // 50MB
+)
+
 func (m *sqlDeliveryQueueRepository) EnqueueEnvelope(ctx context.Context, messageID string, senderDeviceID string, recipientDeviceID string, protocolVersion int, payload []byte, ttlSeconds int, sequence int64) error {
-	const maxMessages = 1000
-	const maxMailboxBytes = 50 * 1024 * 1024 // 50MB
 	const maxEnvelopeBytes = 1 * 1024 * 1024 // 1MB
 
 	if len(payload) > maxEnvelopeBytes {
@@ -169,10 +172,20 @@ func (m *sqlDeliveryQueueRepository) FanOutMessage(ctx context.Context, deviceID
 		if i > 0 {
 			query.WriteString(" UNION ALL ")
 		}
-		query.WriteString("SELECT ?, ?, ?, COALESCE((SELECT sequence FROM delivery_queue WHERE device_id = ? ORDER BY id DESC LIMIT 1), 0) + 1, ?")
-		args = append(args, deviceID, payload, expiryTime, deviceID, currentTime)
+		query.WriteString("SELECT ?, ?, ?, COALESCE((SELECT sequence FROM delivery_queue WHERE device_id = ? ORDER BY id DESC LIMIT 1), 0) + 1, ? WHERE (SELECT COUNT(*) FROM delivery_queue WHERE device_id = ?) < ? AND (SELECT IFNULL(SUM(LENGTH(payload)), 0) FROM delivery_queue WHERE device_id = ?) + ? <= ?")
+		args = append(args, deviceID, payload, expiryTime, deviceID, currentTime, deviceID, maxMessages, deviceID, len(payload), maxMailboxBytes)
 	}
 
-	_, err := m.db.ExecContext(ctx, query.String(), args...)
-	return err
+	res, err := m.db.ExecContext(ctx, query.String(), args...)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrMailboxQuotaExceeded
+	}
+	return nil
 }
