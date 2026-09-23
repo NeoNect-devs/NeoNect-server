@@ -267,16 +267,22 @@ func configureSqlitePragmas(db *sql.DB) error {
 }
 
 func (m *Database) Initialize(ctx context.Context) error {
-	if _, err := m.databaseConnection.ExecContext(ctx, DatabaseSchema); err != nil {
+	tx, err := m.databaseConnection.BeginTx(ctx, nil)
+	if err != nil {
 		return err
 	}
-	if _, err := m.databaseConnection.ExecContext(ctx, Migration1); err != nil {
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, DatabaseSchema); err != nil {
 		return err
 	}
-	if _, err := m.databaseConnection.ExecContext(ctx, Migration2); err != nil {
+	if _, err := tx.ExecContext(ctx, Migration1); err != nil {
 		return err
 	}
-	if _, err := m.databaseConnection.ExecContext(ctx, Migration3); err != nil {
+	if _, err := tx.ExecContext(ctx, Migration2); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, Migration3); err != nil {
 		return err
 	}
 
@@ -293,18 +299,18 @@ func (m *Database) Initialize(ctx context.Context) error {
 				col := parts[5]
 				var count int
 				check := fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name='%s'", table, col)
-				if err := m.databaseConnection.QueryRowContext(ctx, check).Scan(&count); err == nil && count > 0 {
+				if err := tx.QueryRowContext(ctx, check).Scan(&count); err == nil && count > 0 {
 					continue
 				}
 			}
 		}
 
-		if _, err := m.databaseConnection.ExecContext(ctx, stmt); err != nil {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
 			return err
 		}
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 func (m *Database) Close() error {
