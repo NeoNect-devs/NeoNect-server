@@ -69,10 +69,11 @@ func (m *sqlSessionRepository) CreateSession(ctx context.Context, usernameHash s
 }
 
 func (m *sqlSessionRepository) GetUserIdBySession(ctx context.Context, sessionToken string) (int64, error) {
-	if cached, exists := m.activeSessionCache.Load(sessionToken); exists {
+	hashedToken := security.ComputeHash(sessionToken)
+	if cached, exists := m.activeSessionCache.Load(hashedToken); exists {
 		cs := cached.(cachedSession)
 		if time.Now().Unix() > cs.expiresAt {
-			m.activeSessionCache.Delete(sessionToken)
+			m.activeSessionCache.Delete(hashedToken)
 			return 0, errors.New("session expired")
 		}
 		return cs.uid, nil
@@ -81,7 +82,6 @@ func (m *sqlSessionRepository) GetUserIdBySession(ctx context.Context, sessionTo
 	var authenticatedUID int64
 	var ts int64
 
-	hashedToken := security.ComputeHash(sessionToken)
 	err := m.db.QueryRowContext(ctx, Queries.GetBySessWithTime, config.BlockTypeSession, hashedToken).Scan(&authenticatedUID, &ts)
 	if err != nil {
 		return 0, err
@@ -89,18 +89,22 @@ func (m *sqlSessionRepository) GetUserIdBySession(ctx context.Context, sessionTo
 
 	expiresAt := ts + int64(config.SessionDuration.Seconds())
 	if time.Now().Unix() > expiresAt {
-		_ = m.DeleteSession(ctx, sessionToken)
+		_ = m.deleteSessionByHash(ctx, hashedToken)
 		return 0, errors.New("session expired")
 	}
 
-	m.activeSessionCache.Store(sessionToken, cachedSession{uid: authenticatedUID, expiresAt: expiresAt})
+	m.activeSessionCache.Store(hashedToken, cachedSession{uid: authenticatedUID, expiresAt: expiresAt})
 	return authenticatedUID, nil
 }
 
-func (m *sqlSessionRepository) DeleteSession(ctx context.Context, sessionToken string) error {
-	m.activeSessionCache.Delete(sessionToken)
+func (m *sqlSessionRepository) deleteSessionByHash(ctx context.Context, hashedToken string) error {
+	m.activeSessionCache.Delete(hashedToken)
 
-	hashedToken := security.ComputeHash(sessionToken)
 	_, err := m.db.ExecContext(ctx, Queries.DelSess, config.BlockTypeSession, hashedToken)
 	return err
+}
+
+func (m *sqlSessionRepository) DeleteSession(ctx context.Context, sessionToken string) error {
+	hashedToken := security.ComputeHash(sessionToken)
+	return m.deleteSessionByHash(ctx, hashedToken)
 }
