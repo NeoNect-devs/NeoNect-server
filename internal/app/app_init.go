@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 )
 
@@ -135,13 +134,10 @@ func (app *App) ensureStoragePath() {
 
 	dirs := []string{app.Config.DatabaseDir, app.Config.MasterKeyDir}
 	for _, dir := range dirs {
-		absDir, err := filepath.Abs(dir)
-		if err != nil {
-			app.Logger.Fatalf("Failed to resolve absolute path for %s: %v", dir, err)
-		}
-
-		if app.Config.Environment == "beta" && !strings.HasPrefix(absDir, storageRoot) {
-			app.Logger.Fatalf("Critical Misconfiguration: Storage directory %s is outside the project root storage (%s).", absDir, storageRoot)
+		if app.Config.Environment != "development" {
+			if err := config.ValidateStoragePath(dir, storageRoot); err != nil {
+				app.Logger.Fatalf("Critical Misconfiguration: Storage directory %s is outside the project root storage (%s). Error: %v", dir, storageRoot, err)
+			}
 		}
 
 		if err := os.MkdirAll(dir, os.FileMode(config.DirPerm)); err != nil {

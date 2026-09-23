@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
@@ -151,5 +152,85 @@ func GetProjectRoot() string {
 }
 
 func GetStoragePath() string {
-	return filepath.Join(GetProjectRoot(), "storage")
+	return GetEnvOrDefault("NEONECT_STORAGE_ROOT", filepath.Join(GetProjectRoot(), "storage"))
+}
+
+// ValidateStoragePath checks if target is safely contained within root.
+// It explicitly resolves symlinks for all existing components and prevents
+// directory traversal, sibling prefix bypass, and escaping via symlinks.
+func ValidateStoragePath(target, root string) error {
+	resolvedRoot, err := CanonicalizePath(root)
+	if err != nil {
+		return err
+	}
+
+	resolvedTarget, err := CanonicalizePath(target)
+	if err != nil {
+		return err
+	}
+
+	rel, err := filepath.Rel(resolvedRoot, resolvedTarget)
+	if err != nil {
+		return err
+	}
+
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return os.ErrPermission
+	}
+
+	return nil
+}
+
+// CanonicalizePath securely evaluates a path, resolving all existing symlinks.
+// It stops resolving when it encounters the first non-existent component,
+// and returns the accumulated canonical path joined with the remaining non-existent components.
+func CanonicalizePath(path string) (string, error) {
+	if !filepath.IsAbs(path) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		if !strings.HasSuffix(cwd, string(filepath.Separator)) {
+			cwd += string(filepath.Separator)
+		}
+		path = cwd + path
+	}
+
+	vol := filepath.VolumeName(path)
+	pathNoVol := path[len(vol):]
+
+	components := strings.Split(pathNoVol, string(os.PathSeparator))
+
+	current := vol
+	if current == "" {
+		if strings.HasPrefix(path, "/") {
+			current = "/"
+		}
+	} else if strings.HasPrefix(pathNoVol, "\\") || strings.HasPrefix(pathNoVol, "/") {
+		current += string(os.PathSeparator)
+	}
+
+	for _, comp := range components {
+		if comp == "" || comp == "." {
+			continue
+		}
+		if comp == ".." {
+			current = filepath.Dir(current)
+			continue
+		}
+
+		next := filepath.Join(current, comp)
+		eval, err := filepath.EvalSymlinks(next)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				current = next
+			} else {
+				return "", err
+			}
+		} else {
+			current = eval
+		}
+	}
+
+	return filepath.Clean(current), nil
 }
