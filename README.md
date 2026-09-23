@@ -26,3 +26,9 @@ Complete architectural and client-integration manuals structurally reside inhere
 go build -o neonect-server ./cmd/server
 ```
 Review the **[Development Guide](docs/DEVELOPMENT.md)** natively understanding testing operations structurally.
+
+## License
+
+NeoNect is licensed under the Apache License, Version 2.0.
+
+See the `LICENSE` file for the complete license text.
