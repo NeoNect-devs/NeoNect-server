@@ -51,6 +51,5 @@ Thumbs.db
 *.tmp
 
 # Documentation (except README.md)
-docs/
 PROJECT.md
 go.sum

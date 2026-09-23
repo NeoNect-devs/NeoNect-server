@@ -1,7 +1,7 @@
 package service
 
 import (
-	"log"
+	"NeoNect/internal/logger"
 )
 
 type PushAdapter interface {
@@ -11,10 +11,11 @@ type PushAdapter interface {
 
 type pushNotificationAdapter struct {
 	notificationHandler func(deviceID string, payload []byte)
+	logger              logger.Logger
 }
 
-func NewPushAdapter() PushAdapter {
-	return &pushNotificationAdapter{}
+func NewPushAdapter(l logger.Logger) PushAdapter {
+	return &pushNotificationAdapter{logger: l}
 }
 
 func (a *pushNotificationAdapter) SendNotification(deviceID string, payload []byte) error {
@@ -22,7 +23,7 @@ func (a *pushNotificationAdapter) SendNotification(deviceID string, payload []by
 		a.notificationHandler(deviceID, payload)
 	}
 
-	log.Printf("Push notification dispatched")
+	a.logger.Debugf("Push notification dispatched for device: %s", deviceID)
 	return nil
 }
 

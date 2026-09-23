@@ -21,6 +21,7 @@ type SessionRepository interface {
 	CreateSession(ctx context.Context, usernameHash, token string) error
 	GetUserIdBySession(ctx context.Context, token string) (int64, error)
 	DeleteSession(ctx context.Context, token string) error
+	Shutdown()
 }
 
 type DeviceKey struct {

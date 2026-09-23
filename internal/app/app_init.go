@@ -4,6 +4,7 @@ import (
 	"NeoNect/internal/api"
 	"NeoNect/internal/config"
 	"NeoNect/internal/infrastructure/persistence"
+	"NeoNect/internal/logger"
 	"NeoNect/internal/service"
 	"NeoNect/security"
 	"context"
@@ -13,7 +14,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 )
 
@@ -26,7 +26,7 @@ type App struct {
 	SessionRepo persistence.SessionRepository
 	Handlers    *api.HandlerManager
 	Config      config.AppConfig
-	Logger      *AppLogger
+	Logger      logger.Logger
 }
 
 func (app *App) bootstrap(secretPath string) {
@@ -52,7 +52,7 @@ func (app *App) bootstrap(secretPath string) {
 	app.DB = dbManager
 
 	userRepo := persistence.NewUserRepository(dbManager.DB())
-	sessionRepo := persistence.NewSessionRepository(dbManager.DB())
+	sessionRepo := persistence.NewSessionRepository(dbManager.DB(), app.Logger)
 	deviceRepo := persistence.NewDeviceRepository(dbManager.DB())
 	queueRepo := persistence.NewDeliveryQueueRepository(dbManager.DB())
 	integrityRepo := persistence.NewIntegrityRepository(dbManager.DB())
@@ -63,12 +63,12 @@ func (app *App) bootstrap(secretPath string) {
 	app.SessionRepo = sessionRepo
 
 	notifier := service.NewNoopNotifier()
-	wsManager := service.NewWebSocketManager(app.Config.AllowedOrigins)
-	pushAdapter := service.NewPushAdapter()
+	wsManager := service.NewWebSocketManager(app.Config.AllowedOrigins, app.Logger)
+	pushAdapter := service.NewPushAdapter(app.Logger)
 
 	authSvc := service.NewAuthService(userRepo, sessionRepo)
 	deviceSvc := service.NewDeviceService(userRepo, deviceRepo, vault, app.Config.MaxDevicesPerUser)
-	rs := service.NewRelayService(userRepo, deviceRepo, queueRepo, friendRepo, notifier, wsManager, pushAdapter)
+	rs := service.NewRelayService(userRepo, deviceRepo, queueRepo, friendRepo, notifier, wsManager, pushAdapter, app.Logger)
 	friendSvc := service.NewFriendService(userRepo, friendRepo)
 	prekeySvc := service.NewPrekeyService(deviceRepo, prekeyRepo, friendRepo, vault)
 
@@ -79,7 +79,7 @@ func NewApp(secretPath string) *App {
 	appConfig := config.LoadConfig()
 	app := &App{
 		Config: appConfig,
-		Logger: newAppLogger(appConfig.Debug),
+		Logger: logger.New(appConfig.Debug),
 	}
 	app.bootstrap(secretPath)
 	return app
@@ -122,6 +122,9 @@ func (app *App) Close(ctx context.Context) {
 			app.Handlers.RateLimiter.Stop()
 		}
 	}
+	if app.SessionRepo != nil {
+		app.SessionRepo.Shutdown()
+	}
 	if app.DB != nil {
 		_ = app.DB.Close()
 	}
@@ -132,13 +135,10 @@ func (app *App) ensureStoragePath() {
 
 	dirs := []string{app.Config.DatabaseDir, app.Config.MasterKeyDir}
 	for _, dir := range dirs {
-		absDir, err := filepath.Abs(dir)
-		if err != nil {
-			app.Logger.Fatalf("Failed to resolve absolute path for %s: %v", dir, err)
-		}
-
-		if app.Config.Environment != "development" && !strings.HasPrefix(absDir, storageRoot) {
-			app.Logger.Fatalf("Critical Misconfiguration: Storage directory %s is outside the project root storage (%s).", absDir, storageRoot)
+		if app.Config.Environment != "development" {
+			if err := config.ValidateStoragePath(dir, storageRoot); err != nil {
+				app.Logger.Fatalf("Critical Misconfiguration: Storage directory %s is outside the project root storage (%s). Error: %v", dir, storageRoot, err)
+			}
 		}
 
 		if err := os.MkdirAll(dir, os.FileMode(config.DirPerm)); err != nil {

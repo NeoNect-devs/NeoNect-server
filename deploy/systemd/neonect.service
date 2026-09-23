@@ -1,0 +1,35 @@
+[Unit]
+Description=NeoNect Server
+Documentation=https://github.com/neonect/neonect
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=neonect
+Group=neonect
+WorkingDirectory=/opt/neonect
+ExecStart=/opt/neonect/neonect-server
+Restart=on-failure
+RestartSec=5s
+
+StandardOutput=journal
+StandardError=journal
+
+# Configuration
+LoadCredential=bootstrap.key:/etc/neonect/bootstrap.key
+Environment=NEONECT_BOOTSTRAP_KEY_FILE=%d/bootstrap.key
+Environment=NEONECT_DB_DIR=/opt/neonect/storage/database
+Environment=NEONECT_KEY_DIR=/opt/neonect/storage/keys
+Environment=NEONECT_ENV=production
+
+# Security / Sandboxing
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/opt/neonect/storage
+
+[Install]
+WantedBy=multi-user.target
+

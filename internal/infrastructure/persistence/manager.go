@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -35,6 +36,7 @@ var Queries = struct {
 	GetLastSequence        string
 	GetDueItems            string
 	CleanupQueue           string
+	CleanupSess            string
 	CreateFriendship       string
 	CheckFriendship        string
 	VerifyDb               string
@@ -71,6 +73,7 @@ var Queries = struct {
 	GetLastSequence:        "SELECT COALESCE(MAX(sequence), 0) FROM delivery_queue WHERE device_id = ?",
 	GetDueItems:            "SELECT id, device_id, payload, sequence, retry_count, next_retry, ack_deadline, message_id, sender_device_id, protocol_version FROM delivery_queue WHERE next_retry <= ? ORDER BY next_retry ASC LIMIT 100",
 	CleanupQueue:           "DELETE FROM delivery_queue WHERE expiry <= ?",
+	CleanupSess:            "DELETE FROM user_blocks WHERE block_type = ? AND created_at < ?",
 	CreateFriendship:       "INSERT INTO friendships (user_id_1, user_id_2) VALUES (?, ?)",
 	CheckFriendship:        "SELECT EXISTS(SELECT 1 FROM friendships WHERE user_id_1 = ? AND user_id_2 = ?)",
 	VerifyDb:               "SELECT 1",
@@ -121,6 +124,7 @@ const (
 	);
 	CREATE INDEX IF NOT EXISTS idx_user_silo_time ON user_blocks(user_id, block_type, sub_block_id, created_at DESC);
 	CREATE INDEX IF NOT EXISTS idx_session_lookup ON user_blocks(block_type, sub_block_id);
+	CREATE INDEX IF NOT EXISTS idx_session_cleanup ON user_blocks(block_type, created_at);
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_device_unique ON user_blocks(block_type, sub_block_id);
 	CREATE INDEX IF NOT EXISTS idx_queue_device ON delivery_queue(device_id);
 	CREATE INDEX IF NOT EXISTS idx_queue_retry ON delivery_queue(next_retry);
@@ -200,7 +204,6 @@ const (
 		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 	);
 	`
-
 	Migration4 = `
 	ALTER TABLE delivery_queue ADD COLUMN message_id TEXT;
 	ALTER TABLE delivery_queue ADD COLUMN sender_device_id TEXT;
@@ -264,22 +267,50 @@ func configureSqlitePragmas(db *sql.DB) error {
 }
 
 func (m *Database) Initialize(ctx context.Context) error {
-	if _, err := m.databaseConnection.ExecContext(ctx, DatabaseSchema); err != nil {
+	tx, err := m.databaseConnection.BeginTx(ctx, nil)
+	if err != nil {
 		return err
 	}
-	if _, err := m.databaseConnection.ExecContext(ctx, Migration1); err != nil {
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, DatabaseSchema); err != nil {
 		return err
 	}
-	if _, err := m.databaseConnection.ExecContext(ctx, Migration2); err != nil {
+	if _, err := tx.ExecContext(ctx, Migration1); err != nil {
 		return err
 	}
-	if _, err := m.databaseConnection.ExecContext(ctx, Migration3); err != nil {
+	if _, err := tx.ExecContext(ctx, Migration2); err != nil {
 		return err
 	}
-	if _, err := m.databaseConnection.ExecContext(ctx, Migration4); err != nil {
+	if _, err := tx.ExecContext(ctx, Migration3); err != nil {
 		return err
 	}
-	return nil
+
+	for _, stmt := range strings.Split(Migration4, ";") {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+
+		if strings.HasPrefix(strings.ToUpper(stmt), "ALTER TABLE ") && strings.Contains(strings.ToUpper(stmt), " ADD COLUMN ") {
+			parts := strings.Fields(stmt)
+			if len(parts) >= 6 {
+				table := parts[2]
+				col := parts[5]
+				var count int
+				check := fmt.Sprintf("SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name='%s'", table, col)
+				if err := tx.QueryRowContext(ctx, check).Scan(&count); err == nil && count > 0 {
+					continue
+				}
+			}
+		}
+
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (m *Database) Close() error {

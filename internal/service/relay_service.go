@@ -3,6 +3,7 @@ package service
 import (
 	"NeoNect/internal/config"
 	"NeoNect/internal/infrastructure/persistence"
+	"NeoNect/internal/logger"
 	"NeoNect/security"
 	"context"
 	"database/sql"
@@ -17,6 +18,7 @@ var (
 	ErrRecipientDeviceNotFound  = errors.New("recipient device not found")
 	ErrInvalidRecipientDeviceID = errors.New("invalid recipient device id")
 	ErrDuplicateConflict        = errors.New("duplicate message conflict")
+	ErrMailboxQuotaExceeded     = errors.New("mailbox quota exceeded")
 )
 
 type MessageEnvelope struct {
@@ -59,6 +61,7 @@ type RelayManager struct {
 	maintenancePeriod  time.Duration
 	wsManager          WebSocketManager
 	workerWg           sync.WaitGroup
+	logger             logger.Logger
 }
 
 func NewRelayService(
@@ -69,6 +72,7 @@ func NewRelayService(
 	n RealtimeNotifier,
 	ws WebSocketManager,
 	push PushAdapter,
+	l logger.Logger,
 ) RelayService {
 	manager := &RelayManager{
 		userRepository:     uRepo,
@@ -80,10 +84,12 @@ func NewRelayService(
 		messageTTL:         config.DefaultMessageTTL,
 		maintenancePeriod:  config.DefaultCleanupInterval,
 		wsManager:          ws,
+		logger:             l,
 	}
 	manager.worker = &DeliveryWorker{
 		deliveryRepository: qRepo,
 		wsManager:          ws,
+		logger:             l,
 		pushAdapter:        push,
 	}
 	go manager.startMaintenanceLoop()
@@ -129,6 +135,9 @@ func (m *RelayManager) Send(ctx context.Context, senderUID int64, toUsername str
 	m.stateMutex.Unlock()
 
 	if err := m.deliveryRepository.FanOutMessage(ctx, devices, payload, ttl); err != nil {
+		if errors.Is(err, persistence.ErrMailboxQuotaExceeded) {
+			return ErrMailboxQuotaExceeded
+		}
 		return err
 	}
 
@@ -184,6 +193,9 @@ func (m *RelayManager) SendEnvelope(ctx context.Context, senderUID int64, envelo
 		if errors.Is(err, persistence.ErrDuplicateConflict) {
 			return ErrDuplicateConflict
 		}
+		if errors.Is(err, persistence.ErrMailboxQuotaExceeded) {
+			return ErrMailboxQuotaExceeded
+		}
 		return err
 	}
 
@@ -230,6 +242,7 @@ func (m *RelayManager) dispatchDueMessages() {
 	now := time.Now().Unix()
 	items, err := m.deliveryRepository.GetDueItems(context.Background(), now)
 	if err != nil {
+		m.logger.Errorf("Failed to query due messages in scheduler: %v", err)
 		return
 	}
 	for _, item := range items {
@@ -262,7 +275,9 @@ func (m *RelayManager) startMaintenanceLoop() {
 func (m *RelayManager) performMaintenance() {
 	ctx, cancel := context.WithTimeout(context.Background(), config.MaintenanceTimeout)
 	defer cancel()
-	_ = m.deliveryRepository.Cleanup(ctx)
+	if err := m.deliveryRepository.Cleanup(ctx); err != nil {
+		m.logger.Warnf("Maintenance cleanup failed: %v", err)
+	}
 }
 
 func (m *RelayManager) Shutdown(ctx context.Context) {
@@ -283,13 +298,7 @@ func (m *RelayManager) Shutdown(ctx context.Context) {
 
 	select {
 	case <-done:
-		if m.wsManager != nil {
-			m.wsManager.Shutdown()
-		}
 	case <-ctx.Done():
-		if m.wsManager != nil {
-			m.wsManager.Shutdown()
-		}
 		abortCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		select {
@@ -303,6 +312,7 @@ type DeliveryWorker struct {
 	deliveryRepository persistence.DeliveryQueueRepository
 	wsManager          WebSocketManager
 	pushAdapter        PushAdapter
+	logger             logger.Logger
 }
 
 func (w *DeliveryWorker) Process(item persistence.DeliveryQueueItem) {
@@ -320,13 +330,17 @@ func (w *DeliveryWorker) Process(item persistence.DeliveryQueueItem) {
 	}
 
 	if retryCount > config.MaximumRetryAttempts {
-		_ = w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, now+config.TerminalRetryBackoff, 0)
+		if err := w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, now+config.TerminalRetryBackoff, 0); err != nil {
+			w.logger.Errorf("Failed to update state for item %d after max retries: %v", item.ID, err)
+		}
 		return
 	}
 
 	if w.wsManager.DeliverMessage(item) {
 		deadline := now + config.AcknowledgmentTimeout
-		_ = w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, deadline, deadline)
+		if err := w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, deadline, deadline); err != nil {
+			w.logger.Errorf("Failed to update state for item %d during delivery: %v", item.ID, err)
+		}
 		return
 	}
 
@@ -339,9 +353,13 @@ func (w *DeliveryWorker) Process(item persistence.DeliveryQueueItem) {
 		backoff = config.MaximumBackoffDuration
 	}
 
-	_ = w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, now+backoff, 0)
+	if err := w.deliveryRepository.UpdateState(context.Background(), item.ID, retryCount, now+backoff, 0); err != nil {
+		w.logger.Errorf("Failed to update state for item %d during backoff: %v", item.ID, err)
+	}
 
 	if item.RetryCount == 0 && w.pushAdapter != nil {
-		_ = w.pushAdapter.SendNotification(item.DeviceID, item.Payload)
+		if err := w.pushAdapter.SendNotification(item.DeviceID, item.Payload); err != nil {
+			w.logger.Warnf("Push notification failed for device %s: %v", item.DeviceID, err)
+		}
 	}
 }

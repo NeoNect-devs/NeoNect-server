@@ -81,21 +81,28 @@ func (app *App) HSTSMiddleware(next http.Handler) http.Handler {
 func (app *App) CorsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
+		h.Add("Vary", headerOrigin)
 		if origin := r.Header.Get(headerOrigin); origin != "" {
-			allowed := false
+			isExact := false
+			isWildcard := false
 			for _, o := range app.Config.AllowedOrigins {
 				if o == origin {
-					allowed = true
+					isExact = true
 					break
 				}
+				if o == "*" {
+					isWildcard = true
+				}
 			}
-			if allowed {
+			if isExact {
 				h.Set(headerAccessControlOrigin, origin)
+				h.Set(headerAccessControlCreds, valueTrue)
+			} else if isWildcard {
+				h.Set(headerAccessControlOrigin, "*")
 			}
 		}
 		h.Set(headerAccessControlMethods, valueMethods)
 		h.Set(headerAccessControlHeaders, valueHeaders)
-		h.Set(headerAccessControlCreds, valueTrue)
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)

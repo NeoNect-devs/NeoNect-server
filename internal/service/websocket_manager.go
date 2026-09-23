@@ -1,6 +1,7 @@
 package service
 
 import (
+	"NeoNect/internal/logger"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -38,9 +39,13 @@ type socketConnectionManager struct {
 	protocolUpgrader websocket.Upgrader
 	activeSessions   map[string]*websocketSession
 	sessionMutex     sync.RWMutex
+	connSem          chan struct{}
+	logger           logger.Logger
 }
 
-func NewWebSocketManager(allowedOrigins []string) WebSocketManager {
+const MaxGlobalWebSockets = 10000
+
+func NewWebSocketManager(allowedOrigins []string, l logger.Logger) WebSocketManager {
 	m := &socketConnectionManager{
 		protocolUpgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
@@ -49,7 +54,7 @@ func NewWebSocketManager(allowedOrigins []string) WebSocketManager {
 					return true
 				}
 				for _, allowed := range allowedOrigins {
-					if allowed == "*" || allowed == origin {
+					if allowed == origin {
 						return true
 					}
 				}
@@ -57,13 +62,24 @@ func NewWebSocketManager(allowedOrigins []string) WebSocketManager {
 			},
 		},
 		activeSessions: make(map[string]*websocketSession),
+		connSem:        make(chan struct{}, MaxGlobalWebSockets),
+		logger:         l,
 	}
 	return m
 }
 
 func (m *socketConnectionManager) HandleConnection(w http.ResponseWriter, r *http.Request, deviceID string) {
+	select {
+	case m.connSem <- struct{}{}:
+	default:
+		http.Error(w, "Service Unavailable: connection limit reached", http.StatusServiceUnavailable)
+		return
+	}
+
 	connection, err := m.protocolUpgrader.Upgrade(w, r, nil)
 	if err != nil {
+		<-m.connSem
+		m.logger.Warnf("WebSocket upgrade failed from %s for device %s: %v", r.RemoteAddr, deviceID, err)
 		return
 	}
 
@@ -112,6 +128,7 @@ func (m *socketConnectionManager) HandleConnection(w http.ResponseWriter, r *htt
 				delete(m.activeSessions, deviceID)
 			}
 			m.sessionMutex.Unlock()
+			<-m.connSem
 		}()
 
 		s.conn.SetReadDeadline(time.Now().Add(config.PongWait))
