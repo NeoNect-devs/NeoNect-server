@@ -1,20 +1,23 @@
 package persistence
 
 import (
+	"NeoNect/internal/config"
 	"bytes"
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
 
 type sqlDeliveryQueueRepository struct {
-	db *sql.DB
+	db  *sql.DB
+	cfg config.AppConfig
 }
 
-func NewDeliveryQueueRepository(db *sql.DB) DeliveryQueueRepository {
-	return &sqlDeliveryQueueRepository{db: db}
+func NewDeliveryQueueRepository(db *sql.DB, cfg config.AppConfig) DeliveryQueueRepository {
+	return &sqlDeliveryQueueRepository{db: db, cfg: cfg}
 }
 
 func (m *sqlDeliveryQueueRepository) GetLastSequence(ctx context.Context, deviceID string) (int64, error) {
@@ -33,15 +36,9 @@ func (m *sqlDeliveryQueueRepository) Enqueue(ctx context.Context, deviceID strin
 var ErrDuplicateConflict = errors.New("duplicate message ID with incompatible envelope")
 var ErrMailboxQuotaExceeded = errors.New("mailbox quota exceeded")
 
-const (
-	maxMessages     = 1000
-	maxMailboxBytes = 50 * 1024 * 1024 // 50MB
-)
-
 func (m *sqlDeliveryQueueRepository) EnqueueEnvelope(ctx context.Context, messageID string, senderDeviceID string, recipientDeviceID string, protocolVersion int, payload []byte, ttlSeconds int, sequence int64) error {
-	const maxEnvelopeBytes = 1 * 1024 * 1024 // 1MB
 
-	if len(payload) > maxEnvelopeBytes {
+	if len(payload) > int(m.cfg.MaxEnvelopeBytes) {
 		return errors.New("envelope size exceeds maximum allowed")
 	}
 
@@ -58,8 +55,8 @@ func (m *sqlDeliveryQueueRepository) EnqueueEnvelope(ctx context.Context, messag
 
 	res, err := m.db.ExecContext(ctx, query,
 		messageID, senderDeviceID, recipientDeviceID, protocolVersion, payload, expiryTime, sequence, currentTime,
-		recipientDeviceID, maxMessages,
-		recipientDeviceID, len(payload), maxMailboxBytes,
+		recipientDeviceID, int(m.cfg.MaxMailboxMessages),
+		recipientDeviceID, len(payload), int(m.cfg.MaxMailboxBytes),
 	)
 	if err != nil {
 		return err
@@ -140,7 +137,8 @@ func (m *sqlDeliveryQueueRepository) Cleanup(ctx context.Context) error {
 }
 
 func (m *sqlDeliveryQueueRepository) GetDueItems(ctx context.Context, currentTime int64) ([]DeliveryQueueItem, error) {
-	rows, err := m.db.QueryContext(ctx, Queries.GetDueItems, currentTime)
+	query := fmt.Sprintf("%s LIMIT %d", Queries.GetDueItems, m.cfg.DeliveryBatchSize)
+	rows, err := m.db.QueryContext(ctx, query, currentTime)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +171,7 @@ func (m *sqlDeliveryQueueRepository) FanOutMessage(ctx context.Context, deviceID
 			query.WriteString(" UNION ALL ")
 		}
 		query.WriteString("SELECT ?, ?, ?, COALESCE((SELECT sequence FROM delivery_queue WHERE device_id = ? ORDER BY id DESC LIMIT 1), 0) + 1, ? WHERE (SELECT COUNT(*) FROM delivery_queue WHERE device_id = ?) < ? AND (SELECT IFNULL(SUM(LENGTH(payload)), 0) FROM delivery_queue WHERE device_id = ?) + ? <= ?")
-		args = append(args, deviceID, payload, expiryTime, deviceID, currentTime, deviceID, maxMessages, deviceID, len(payload), maxMailboxBytes)
+		args = append(args, deviceID, payload, expiryTime, deviceID, currentTime, deviceID, int(m.cfg.MaxMailboxMessages), deviceID, len(payload), int(m.cfg.MaxMailboxBytes))
 	}
 
 	res, err := m.db.ExecContext(ctx, query.String(), args...)

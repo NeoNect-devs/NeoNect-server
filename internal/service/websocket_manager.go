@@ -41,11 +41,10 @@ type socketConnectionManager struct {
 	sessionMutex     sync.RWMutex
 	connSem          chan struct{}
 	logger           logger.Logger
+	cfg              config.AppConfig
 }
 
-const MaxGlobalWebSockets = 10000
-
-func NewWebSocketManager(allowedOrigins []string, l logger.Logger) WebSocketManager {
+func NewWebSocketManager(allowedOrigins []string, l logger.Logger, cfg config.AppConfig) WebSocketManager {
 	m := &socketConnectionManager{
 		protocolUpgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
@@ -62,7 +61,8 @@ func NewWebSocketManager(allowedOrigins []string, l logger.Logger) WebSocketMana
 			},
 		},
 		activeSessions: make(map[string]*websocketSession),
-		connSem:        make(chan struct{}, MaxGlobalWebSockets),
+		connSem:        make(chan struct{}, cfg.MaxGlobalWebSockets),
+		cfg:            cfg,
 		logger:         l,
 	}
 	return m
@@ -83,7 +83,7 @@ func (m *socketConnectionManager) HandleConnection(w http.ResponseWriter, r *htt
 		return
 	}
 
-	connection.SetReadLimit(config.GlobalMaxBodySize)
+	connection.SetReadLimit(m.cfg.WsMaxMessageBytes)
 
 	sess := &websocketSession{
 		conn: connection,
@@ -100,7 +100,7 @@ func (m *socketConnectionManager) HandleConnection(w http.ResponseWriter, r *htt
 	var stopOnce sync.Once
 
 	go func(s *websocketSession, stop <-chan struct{}) {
-		ticker := time.NewTicker(config.PingPeriod)
+		ticker := time.NewTicker(m.cfg.WsPingPeriod)
 		defer ticker.Stop()
 		for {
 			select {
@@ -131,9 +131,9 @@ func (m *socketConnectionManager) HandleConnection(w http.ResponseWriter, r *htt
 			<-m.connSem
 		}()
 
-		s.conn.SetReadDeadline(time.Now().Add(config.PongWait))
+		s.conn.SetReadDeadline(time.Now().Add(m.cfg.WsPongWait))
 		s.conn.SetPongHandler(func(string) error {
-			s.conn.SetReadDeadline(time.Now().Add(config.PongWait))
+			s.conn.SetReadDeadline(time.Now().Add(m.cfg.WsPongWait))
 			return nil
 		})
 		for {

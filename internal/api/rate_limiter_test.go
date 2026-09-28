@@ -1,6 +1,7 @@
 package api
 
 import (
+	"NeoNect/internal/config"
 	"sync"
 	"testing"
 	"time"
@@ -118,7 +119,7 @@ func TestGaugeLimiter_IsolationAndConcurrent(t *testing.T) {
 }
 
 func TestRateLimiter_Integration(t *testing.T) {
-	rl := NewRateLimiter()
+	rl := NewRateLimiter(config.LoadConfig())
 
 	// Inject clock
 	currentTime := time.Now()

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"NeoNect/internal/config"
 	"net"
 
 	"NeoNect/internal/infrastructure/persistence"
@@ -49,6 +50,7 @@ func NewHandlerManager(
 	integrity persistence.IntegrityRepository,
 	vault *security.SystemVault,
 	trustedProxies []string,
+	appConfig config.AppConfig,
 ) *HandlerManager {
 	return &HandlerManager{
 		AuthService:    auth,
@@ -60,7 +62,7 @@ func NewHandlerManager(
 		UserRepo:       user,
 		IntegrityRepo:  integrity,
 		Vault:          vault,
-		RateLimiter:    NewRateLimiter(),
+		RateLimiter:    NewRateLimiter(appConfig),
 		TrustedProxies: ParseTrustedProxies(trustedProxies),
 	}
 }

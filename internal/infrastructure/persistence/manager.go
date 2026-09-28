@@ -71,7 +71,7 @@ var Queries = struct {
 	UpdateState:            "UPDATE delivery_queue SET retry_count = ?, next_retry = ?, ack_deadline = ? WHERE id = ?",
 	ClaimItem:              "UPDATE delivery_queue SET next_retry = ? WHERE id = ? AND next_retry <= ?",
 	GetLastSequence:        "SELECT COALESCE(MAX(sequence), 0) FROM delivery_queue WHERE device_id = ?",
-	GetDueItems:            "SELECT id, device_id, payload, sequence, retry_count, next_retry, ack_deadline, message_id, sender_device_id, protocol_version FROM delivery_queue WHERE next_retry <= ? ORDER BY next_retry ASC LIMIT 100",
+	GetDueItems:            "SELECT id, device_id, payload, sequence, retry_count, next_retry, ack_deadline, message_id, sender_device_id, protocol_version FROM delivery_queue WHERE next_retry <= ? ORDER BY next_retry ASC",
 	CleanupQueue:           "DELETE FROM delivery_queue WHERE expiry <= ?",
 	CleanupSess:            "DELETE FROM user_blocks WHERE block_type = ? AND created_at < ?",
 	CreateFriendship:       "INSERT INTO friendships (user_id_1, user_id_2) VALUES (?, ?)",
@@ -217,23 +217,23 @@ type Database struct {
 	databasePath       string
 }
 
-func NewDatabase(dbPath string) (*Database, error) {
+func NewDatabase(dbPath string, cfg config.AppConfig) (*Database, error) {
 	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(%d)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)",
-		dbPath, config.SqliteBusyTimeout)
+		dbPath, cfg.SqliteBusyTimeoutMs)
 
 	db, err := sql.Open(config.DriverSqlite, dsn)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := configureSqlitePragmas(db); err != nil {
+	if err := configureSqlitePragmas(db, cfg); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 
-	db.SetMaxOpenConns(config.MaxOpenConns)
-	db.SetMaxIdleConns(config.MaxIdleConns)
-	db.SetConnMaxLifetime(config.ConnMaxLifetime)
+	db.SetMaxOpenConns(cfg.DbMaxOpenConns)
+	db.SetMaxIdleConns(cfg.DbMaxIdleConns)
+	db.SetConnMaxLifetime(cfg.DbConnMaxLifetime)
 
 	return &Database{
 		databaseConnection: db,
@@ -241,23 +241,23 @@ func NewDatabase(dbPath string) (*Database, error) {
 	}, nil
 }
 
-func configureSqlitePragmas(db *sql.DB) error {
+func configureSqlitePragmas(db *sql.DB, cfg config.AppConfig) error {
 	if _, err := db.Exec(Queries.PragmaJournal); err != nil {
 		return err
 	}
 	if _, err := db.Exec(Queries.PragmaSync); err != nil {
 		return err
 	}
-	if _, err := db.Exec(Queries.PragmaBusy); err != nil {
+	if _, err := db.Exec(fmt.Sprintf("PRAGMA busy_timeout = %d", cfg.SqliteBusyTimeoutMs)); err != nil {
 		return err
 	}
-	if _, err := db.Exec(Queries.PragmaCache); err != nil {
+	if _, err := db.Exec(fmt.Sprintf("PRAGMA cache_size = %d", cfg.SqliteCacheSize)); err != nil {
 		return err
 	}
 	if _, err := db.Exec(Queries.PragmaForeignKeys); err != nil {
 		return err
 	}
-	if _, err := db.Exec(Queries.PragmaMmapSize); err != nil {
+	if _, err := db.Exec(fmt.Sprintf("PRAGMA mmap_size = %d", cfg.SqliteMmapSizeBytes)); err != nil {
 		return err
 	}
 	if _, err := db.Exec(Queries.PragmaTempStore); err != nil {

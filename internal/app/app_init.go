@@ -54,7 +54,7 @@ func (app *App) bootstrap(secretPath string) {
 	userRepo := persistence.NewUserRepository(dbManager.DB())
 	sessionRepo := persistence.NewSessionRepository(dbManager.DB(), app.Logger)
 	deviceRepo := persistence.NewDeviceRepository(dbManager.DB())
-	queueRepo := persistence.NewDeliveryQueueRepository(dbManager.DB())
+	queueRepo := persistence.NewDeliveryQueueRepository(dbManager.DB(), app.Config)
 	integrityRepo := persistence.NewIntegrityRepository(dbManager.DB())
 	friendRepo := persistence.NewFriendshipRepository(dbManager.DB())
 
@@ -63,7 +63,7 @@ func (app *App) bootstrap(secretPath string) {
 	app.SessionRepo = sessionRepo
 
 	notifier := service.NewNoopNotifier()
-	wsManager := service.NewWebSocketManager(app.Config.AllowedOrigins, app.Logger)
+	wsManager := service.NewWebSocketManager(app.Config.AllowedOrigins, app.Logger, app.Config)
 	pushAdapter := service.NewPushAdapter(app.Logger)
 
 	authSvc := service.NewAuthService(userRepo, sessionRepo)
@@ -72,7 +72,7 @@ func (app *App) bootstrap(secretPath string) {
 	friendSvc := service.NewFriendService(userRepo, friendRepo)
 	prekeySvc := service.NewPrekeyService(deviceRepo, prekeyRepo, friendRepo, vault)
 
-	app.Handlers = api.NewHandlerManager(authSvc, rs, wsManager, deviceSvc, friendSvc, prekeySvc, userRepo, integrityRepo, vault, app.Config.TrustedProxies)
+	app.Handlers = api.NewHandlerManager(authSvc, rs, wsManager, deviceSvc, friendSvc, prekeySvc, userRepo, integrityRepo, vault, app.Config.TrustedProxies, app.Config)
 }
 
 func NewApp(secretPath string) *App {
@@ -163,5 +163,5 @@ func (app *App) ensureMasterKey(path string) {
 func (app *App) setupDatabase(vault *security.SystemVault) (*persistence.Database, error) {
 	dbPath := filepath.Join(app.Config.DatabaseDir, vault.Hash(app.Config.DatabaseName)+config.SqliteExt)
 	app.Logger.Infof("Database path: %s", dbPath)
-	return persistence.NewDatabase(dbPath)
+	return persistence.NewDatabase(dbPath, app.Config)
 }

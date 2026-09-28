@@ -50,7 +50,7 @@ func (app *App) RecoverMiddleware(next http.Handler) http.Handler {
 
 func (app *App) TimeoutMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), config.RequestContextTimeout)
+		ctx, cancel := context.WithTimeout(r.Context(), app.Config.RequestContextTimeout)
 		defer cancel()
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -115,7 +115,7 @@ func (app *App) CorsMiddleware(next http.Handler) http.Handler {
 func (app *App) BodyLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
-			r.Body = http.MaxBytesReader(w, r.Body, config.GlobalMaxBodySize)
+			r.Body = http.MaxBytesReader(w, r.Body, app.Config.HttpMaxBodyBytes)
 		}
 		next.ServeHTTP(w, r)
 	})

@@ -1,31 +1,19 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
-
-func getFreePort() int {
-	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0
-	}
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0
-	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port
-}
 
 func TestServerMain_Lifecycle(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -37,11 +25,6 @@ func TestServerMain_Lifecycle(t *testing.T) {
 		t.Fatalf("Failed to build binary: %v\nOutput: %s", err, string(out))
 	}
 
-	port := getFreePort()
-	if port == 0 {
-		t.Fatalf("Could not get free port")
-	}
-
 	// 2. Run the binary
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -50,37 +33,83 @@ func TestServerMain_Lifecycle(t *testing.T) {
 	cmd.Env = append(os.Environ(),
 		"NEONECT_ENV=development",
 		"NEONECT_BOOTSTRAP_KEY=0123456789abcdef0123456789abcdef",
-		fmt.Sprintf("NEONECT_BIND_ADDR=127.0.0.1:%d", port),
+		"NEONECT_BIND_ADDR=127.0.0.1:0",
 		fmt.Sprintf("NEONECT_DB_DIR=%s", filepath.Join(tmpDir, "db")),
 		fmt.Sprintf("NEONECT_KEY_DIR=%s", filepath.Join(tmpDir, "keys")),
 	)
 
-	var stdoutBuf, stderrBuf strings.Builder
-	cmd.Stdout = &stdoutBuf
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("Failed to get stdout pipe: %v", err)
+	}
+
+	var stderrBuf strings.Builder
 	cmd.Stderr = &stderrBuf
 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Failed to start binary: %v", err)
 	}
 
-	// Wait for initialization and hit the health endpoint
-	var resp *http.Response
-	var err error
-	success := false
-	for i := 0; i < 20; i++ {
-		time.Sleep(100 * time.Millisecond)
-		resp, err = http.Get(fmt.Sprintf("http://127.0.0.1:%d/api/v1/health", port))
-		if err == nil {
-			success = true
-			break
+	var stdoutBuf strings.Builder
+	var stdoutMu sync.Mutex
+
+	// Ensure cleanup of process and pipes, and print logs on failure
+	t.Cleanup(func() {
+		cancel() // Signal the process to kill
+		_ = cmd.Wait() // Wait for process to exit and close pipes
+
+		if t.Failed() {
+			stdoutMu.Lock()
+			t.Logf("Binary Stdout:\n%s", stdoutBuf.String())
+			stdoutMu.Unlock()
+			t.Logf("Binary Stderr:\n%s", stderrBuf.String())
 		}
+	})
+
+	portChan := make(chan int, 1)
+
+	go func() {
+		scanner := bufio.NewScanner(stdoutPipe)
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			stdoutMu.Lock()
+			stdoutBuf.WriteString(line + "\n")
+			stdoutMu.Unlock()
+
+			if strings.Contains(line, "Assigned Port:") {
+				parts := strings.Fields(line)
+				if len(parts) > 0 {
+					var p int
+					if _, err := fmt.Sscanf(parts[len(parts)-1], "%d", &p); err == nil && p > 0 {
+						select {
+						case portChan <- p:
+						default:
+						}
+					}
+				}
+			}
+		}
+	}()
+
+	var port int
+	select {
+	case port = <-portChan:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("Timed out waiting for server to report assigned port")
 	}
 
-	if !success {
-		cmd.Process.Kill()
-		cmd.Wait()
-		t.Logf("Binary Stdout:\n%s", stdoutBuf.String())
-		t.Logf("Binary Stderr:\n%s", stderrBuf.String())
+	// Wait for initialization and hit the health endpoint
+	ctxReq, cancelReq := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelReq()
+
+	req, err := http.NewRequestWithContext(ctxReq, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/api/v1/health", port), nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
 		t.Fatalf("Failed to reach health endpoint after 2 seconds: %v", err)
 	}
 	defer resp.Body.Close()

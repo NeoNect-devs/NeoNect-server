@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"NeoNect/internal/config"
 	"context"
 	"os"
 	"testing"
@@ -11,7 +12,7 @@ func TestDatabase_InitializeAtomicity(t *testing.T) {
 	os.Remove(dbPath)
 	defer os.Remove(dbPath)
 
-	db, err := NewDatabase(dbPath)
+	db, err := NewDatabase(dbPath, config.LoadConfig())
 	if err != nil {
 		t.Fatalf("Failed to create db: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestDatabase_InitializeIdempotency(t *testing.T) {
 	os.Remove(dbPath)
 	defer os.Remove(dbPath)
 
-	db, err := NewDatabase(dbPath)
+	db, err := NewDatabase(dbPath, config.LoadConfig())
 	if err != nil {
 		t.Fatalf("Failed to create db: %v", err)
 	}

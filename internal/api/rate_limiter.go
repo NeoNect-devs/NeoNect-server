@@ -3,23 +3,9 @@ package api
 import (
 	"NeoNect/internal/config"
 	"hash/maphash"
-	"os"
-	"strconv"
 	"sync"
 	"time"
 )
-
-func getEnvInt(key string, defaultValue int) int {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	parsedValue, err := strconv.Atoi(value)
-	if err != nil {
-		return defaultValue
-	}
-	return parsedValue
-}
 
 // RateWindow implements a strictly bounded sliding window log using a ring buffer.
 type RateWindow struct {
@@ -236,13 +222,7 @@ type RequestRateLimiter struct {
 	nowFunc    func() time.Time
 }
 
-func NewRateLimiter() *RequestRateLimiter {
-	maxConn := getEnvInt("NEONECT_MAX_CONN_PER_IP", config.RateLimitMaxConnPerIP)
-	maxReq := getEnvInt("NEONECT_MAX_REQ_PER_SEC_IP", config.RateLimitMaxReqPerSecIP)
-	maxMsg := getEnvInt("NEONECT_MAX_MSG_PER_SEC", config.RateLimitMaxMsgPerSec)
-	maxDisc := getEnvInt("NEONECT_MAX_DISCOVERY_PER_SEC", config.RateLimitMaxDiscoveryPerSec)
-	maxAuth := 5
-
+func NewRateLimiter(cfg config.AppConfig) *RequestRateLimiter {
 	return &RequestRateLimiter{
 		connections: NewGaugeLimiter(64, stringHasher),
 		ipReq:       NewTimeWindowLimiter(64, 218, stringHasher),
@@ -250,11 +230,11 @@ func NewRateLimiter() *RequestRateLimiter {
 		usrMsg:      NewTimeWindowLimiter(64, 62, int64Hasher),
 		usrDisc:     NewTimeWindowLimiter(64, 200, int64Hasher),
 
-		maxConnPerIP:       maxConn,
-		maxReqPerSecIP:     maxReq,
-		maxMsgPerSec:       maxMsg,
-		maxDiscoveryPerSec: maxDisc,
-		maxAuthPerSecIP:    maxAuth,
+		maxConnPerIP:       cfg.MaxConnPerIP,
+		maxReqPerSecIP:     cfg.MaxReqPerSecIP,
+		maxMsgPerSec:       cfg.MaxMsgPerSec,
+		maxDiscoveryPerSec: cfg.MaxDiscoveryPerSec,
+		maxAuthPerSecIP:    cfg.MaxAuthPerSecIP,
 
 		rateWindow: time.Second,
 		nowFunc:    time.Now,
