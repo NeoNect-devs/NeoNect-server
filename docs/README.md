@@ -1,20 +1,22 @@
-# NeoNect Documentation Directory
+# NeoNect Documentation Index
 
-Welcome to the internal structure details of the NeoNect Server system.
+Welcome to the NeoNect Server documentation. This index maps all available guides across the repository.
 
-## Navigation
+## 🚀 Start Here
+- **[Main README](../README.md)**: High-level overview and status.
+- **[Getting Started](GETTING_STARTED.md)**: Step-by-step local development setup.
 
-- [API Reference](API.md): Endpoint URLs, payloads, and protocol bounds.
-- [Authentication Model](AUTHENTICATION.md): Internal mappings surrounding tokens, storage bounds, and cache boundaries.
-- [WebSocket Protocol](WEBSOCKET.md): Handshake, limitations, and realtime framing mappings securely handling origin limits.
-- [Protocol Limits](PROTOCOL.md): Explicit delineations defining v1 legacy limits vs v2 Idempotent device bounds accurately mapped against quotas.
-- [Environment Configuration](ENVIRONMENT.md): Absolute variables dictating internal production states securely mapping Vaults.
-- [Deployment Information](DEPLOYMENT.md): Service boundaries explicitly isolating configurations via systemd mappings cleanly.
-- [Architecture](ARCHITECTURE.md): Component interactions bounding logic effectively into structural paths safely mapping HTTP payloads into isolated offline mailboxes.
-- [Security Model](SECURITY.md): Threat boundary isolating the cryptography blindly alongside explicitly verified constraints globally.
-- [Database](DATABASE.md): Idempotent transactional schema bounds structurally executing operations isolated gracefully avoiding schema fragmentation.
-- [Development Guide](DEVELOPMENT.md): Baseline parameters for operating the system locally safely executing comprehensive limits securely.
-- [Externally Visible Errors](ERRORS.md): Defined HTTP response formats natively bubbled cleanly avoiding abstract errors.
+## ⚙️ Configuration
+- **[Environment Variables](ENVIRONMENT.md)**: Full reference of all `NEONECT_` bounds and limits.
 
-## Documentation Scope
-This documentation describes exactly what the server implements today. It explicitly documents missing elements (e.g. absent migration tracking) and accurately explains legacy behaviors (v1 partial failures).
+## 🛳️ Deployment
+- **[Deployment Guide](../deploy/README.md)**: Systemd instructions and server management.
+- **[Troubleshooting](TROUBLESHOOTING.md)**: Verified fixes for common startup and operational errors.
+
+## 🏛️ Architecture & Protocol
+- **[Database & Persistence](DATABASE.md)**: SQLite constraints, WAL mode, and safe backup procedures.
+
+## 📦 Releases & Versioning
+- **[Versioning Policy](VERSIONING.md)**: Semantic versioning definitions.
+- **[Changelog](../CHANGELOG.md)**: Historical release records.
+- **[Releasing Guide](RELEASING.md)**: Maintainer checklist for cutting new tags.

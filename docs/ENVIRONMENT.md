@@ -1,196 +1,215 @@
-# Environment Variables Reference
+# Environment Configuration
 
-NeoNect Server determines runtime state predominantly via environment bounds.
+## What is an Environment Variable?
+An environment variable is a dynamic value that affects the way running processes behave. NeoNect Server reads limits, endpoints, and credentials from the environment at startup.
+*Note: NeoNect does NOT automatically parse `.env` files. You must export them via your shell or deployment system.*
 
-## Critical Configuration
+**How to set one (Linux/macOS):**
+```bash
+export NEONECT_HTTP_MAX_BODY_BYTES=4194304
+```
 
-### `NEONECT_ENV`
-- **Purpose**: Defines operational mode.
-- **Values**: `development`, `beta`, `production`
-- **Default**: `beta` (Fails fatally if unsupported).
+---
 
-### `NEONECT_DEBUG`
-- **Purpose**: Enable verbose logging.
-- **Default**: `false` (Always forced false if ENV is beta or production).
+## 🔒 Required Secrets
 
 ### `NEONECT_BOOTSTRAP_KEY`
-- **Purpose**: A strictly enforced 32-byte (AES-256) master encryption key used to unlock the `SystemVault`.
-- **Sensitivity**: CRITICAL.
+- **Required**: YES (Or NEONECT_BOOTSTRAP_KEY_FILE)
+- **Type**: String (Exactly 32 bytes required for AES-256)
+- **Purpose**: The master encryption key to unlock the server's Vault.
 
 ### `NEONECT_BOOTSTRAP_KEY_FILE`
-- **Purpose**: Explicitly loads the bootstrap key from a filesystem path, taking precedence over `NEONECT_BOOTSTRAP_KEY`.
-- **Sensitivity**: CRITICAL.
+- **Required**: YES (Or NEONECT_BOOTSTRAP_KEY)
+- **Type**: Path string
+- **Purpose**: A file path containing the 32-byte master encryption key (useful for systemd `LoadCredential`).
 
-### `NEONECT_INTEGRITY_SEED`
-- **Purpose**: Seed value used for database/vault integrity verification.
-- **Default**: `integrity_pulse`
+---
 
-### `NEONECT_MASTER_KEY_FILE`
-- **Purpose**: The filename used to store the encrypted SQLite/Vault master key payload.
-- **Default**: `master.key`
+## 🚦 General Configuration & Limits
 
-## Networking & Filesystem Configuration
+### `NEONECT_ENV`
+- **Required**: Optional
+- **Default**: `beta`
+- **Purpose**: Determines the operating environment (`development`, `beta`, `production`).
+
+### `NEONECT_DEBUG`
+- **Required**: Optional
+- **Default**: `false`
+- **Purpose**: Enable debug logging (forced false in beta/production).
 
 ### `NEONECT_BIND_ADDR`
-- **Purpose**: Server listening interface and port.
-- **Default**: `0.0.0.0:0` (random port).
-
-### `NEONECT_NODE_ADDR`
-- **Purpose**: Public/Advertised Node Address.
-- **Optional**: Yes.
-
-### `NEONECT_STORAGE_ROOT`
-- **Purpose**: Global base path for storage directories.
-- **Default**: `<project_root>/storage`
-
-### `NEONECT_DB_DIR`
-- **Purpose**: The directory containing SQLite DB/WAL artifacts.
-- **Default**: `storage/database`
-
-### `NEONECT_DB_NAME`
-- **Purpose**: The explicit database filename.
-- **Default**: `neonect_v1_beta` (in beta), `neonect_v1_production` (in production).
-
-### `NEONECT_KEY_DIR`
-- **Purpose**: The directory path for cryptographic artifacts/TLS keys.
-- **Default**: `storage/keys`
-
-### `NEONECT_CERT_FILE` / `NEONECT_KEY_FILE`
-- **Purpose**: Filenames for TLS certificate and private key.
-- **Default**: `cert.pem` / `key.pem`
-
-## HTTP Timeouts
-
-### `NEONECT_READ_TIMEOUT`
-- **Purpose**: Read timeout duration in seconds.
-- **Default**: `15`
-
-### `NEONECT_WRITE_TIMEOUT`
-- **Purpose**: Write timeout duration in seconds.
-- **Default**: `15`
-
-### `NEONECT_IDLE_TIMEOUT`
-- **Purpose**: Idle connection timeout in seconds.
-- **Default**: `60`
-
-## Security & Storage Limits
-### `NEONECT_MAX_DEVICES`
-- **Purpose**: Max devices allowed to be registered per user account.
-- **Default**: `10`
+- **Required**: Optional
+- **Default**: `0.0.0.0:0` (Random port)
+- **Purpose**: Binding address and port for the HTTP/WebSocket server.
 
 ### `NEONECT_ALLOWED_ORIGINS`
-- **Purpose**: Comma-separated strict Origin validations for CORS and WebSocket handshake procedures.
-- **Example**: `https://app.neonect.io,https://web.neonect.io`
+- **Required**: Optional
+- **Default**: Empty
+- **Purpose**: Comma-separated list of allowed CORS origins.
 
 ### `NEONECT_TRUSTED_PROXIES`
-- **Purpose**: Comma-separated list of IPs allowed to forward `X-Forwarded-For` for rate limiting.
+- **Required**: Optional
+- **Default**: Empty
+- **Purpose**: Comma-separated list of trusted upstream proxies.
 
-### Rate Limits
-- `NEONECT_MAX_CONN_PER_IP`: Max generic requests limits.
-- `NEONECT_MAX_REQ_PER_SEC_IP`: Sustained request bounds.
-- `NEONECT_MAX_MSG_PER_SEC`: Max messaging API limits.
-- `NEONECT_MAX_DISCOVERY_PER_SEC`: Bound for querying external public keys.
-
-## Operational Limits
-
-### `NEONECT_HTTP_MAX_BODY_BYTES`
-- **Purpose**: Controls maximum HTTP request body size.
-- **Unit**: Bytes
-- **Default**: `4194304` (4 MiB)
-- **Safe meaning**: Prevent memory exhaustion from large HTTP requests.
-
-### `NEONECT_WS_MAX_MESSAGE_BYTES`
-- **Purpose**: Controls maximum WebSocket read message size.
-- **Unit**: Bytes
-- **Default**: `4194304` (4 MiB)
-- **Safe meaning**: Prevent memory exhaustion from large WebSocket messages.
-
-### `NEONECT_MAX_ENVELOPE_BYTES`
-- **Purpose**: Controls maximum size of an individual envelope payload.
-- **Unit**: Bytes
-- **Default**: `1048576` (1 MiB)
-- **Safe meaning**: Ensure individual envelopes fit comfortably within limits. Must not exceed ingress limits.
-
-### `NEONECT_MAX_MAILBOX_BYTES`
-- **Purpose**: Controls the maximum combined bytes allowed in a device's delivery queue mailbox.
-- **Unit**: Bytes
-- **Default**: `52428800` (50 MiB)
-- **Safe meaning**: Limits total storage per offline device.
-
-### `NEONECT_MAX_MAILBOX_MESSAGES`
-- **Purpose**: Controls the maximum number of unread messages stored in a device's delivery queue.
-- **Unit**: Count
-- **Default**: `1000`
-- **Safe meaning**: Bounds sequence exhaustion and general queue length.
-
-### `NEONECT_MAX_GLOBAL_WEBSOCKETS`
-- **Purpose**: Controls the system-wide maximum number of concurrent WebSocket connections.
-- **Unit**: Count
-- **Default**: `10000`
-- **Safe meaning**: Protects against file descriptor and goroutine exhaustion.
-
-### `NEONECT_DELIVERY_BATCH_SIZE`
-- **Purpose**: Maximum number of delivery queue items to fetch in a single background batch.
-- **Unit**: Count
-- **Default**: `100`
-- **Safe meaning**: Prevents excessive memory use and prolonged database locks during queue polling.
-
-### `NEONECT_DB_MAX_OPEN_CONNS`
-- **Purpose**: Maximum number of open connections to the SQLite database.
-- **Unit**: Count
+### `NEONECT_MAX_DEVICES`
+- **Required**: Optional
 - **Default**: `10`
-- **Safe meaning**: Ensures predictable concurrency for the WAL-mode database.
+- **Purpose**: Max bound devices per user.
 
-### `NEONECT_DB_MAX_IDLE_CONNS`
-- **Purpose**: Maximum number of idle connections retained in the database pool.
-- **Unit**: Count
-- **Default**: `5`
-- **Safe meaning**: Recycles connections during low load. Must be <= NEONECT_DB_MAX_OPEN_CONNS.
+### `NEONECT_INTEGRITY_SEED`
+- **Required**: Optional
+- **Default**: `integrity_pulse`
+- **Purpose**: Used for database/vault integrity checks.
 
-### `NEONECT_DB_CONN_MAX_LIFETIME_SECONDS`
-- **Purpose**: Maximum lifetime of a database connection before being forcefully retired.
+### `NEONECT_MASTER_KEY_FILE`
+- **Required**: Optional
+- **Default**: `master.key`
+- **Purpose**: Filename to store the encrypted SQLite/Vault master payload.
+
+### `NEONECT_CERT_FILE` & `NEONECT_KEY_FILE`
+- **Required**: Optional
+- **Default**: `cert.pem`, `key.pem`
+- **Purpose**: Paths for TLS certificates (if terminating TLS natively).
+
+---
+
+## 🗄️ Database Paths
+
+### `NEONECT_STORAGE_ROOT`
+- **Required**: Optional
+- **Default**: `./storage` relative to project root
+- **Purpose**: Root directory for keys and databases.
+
+### `NEONECT_DB_DIR`
+- **Required**: Optional
+- **Default**: `NEONECT_STORAGE_ROOT/database`
+- **Purpose**: Location of the SQLite database.
+
+### `NEONECT_KEY_DIR`
+- **Required**: Optional
+- **Default**: `NEONECT_STORAGE_ROOT/keys`
+- **Purpose**: Location of key files.
+
+### `NEONECT_DB_NAME`
+- **Required**: Optional
+- **Default**: `neonect_v1_beta` (depends on `NEONECT_ENV`)
+- **Purpose**: SQLite database filename (without extension).
+
+---
+
+## 🕒 Timeouts & Limits
+
+### `NEONECT_READ_TIMEOUT`, `NEONECT_WRITE_TIMEOUT`
+- **Required**: Optional
+- **Default**: `15`
 - **Unit**: Seconds
-- **Default**: `3600` (1 hour)
-- **Safe meaning**: Mitigates potential subtle connection state leaks.
+- **Purpose**: HTTP server read/write timeouts.
 
-### `NEONECT_SQLITE_BUSY_TIMEOUT_MS`
-- **Purpose**: Time SQLite will wait for a lock before returning SQLITE_BUSY.
-- **Unit**: Milliseconds
-- **Default**: `10000` (10 seconds)
-- **Safe meaning**: Prevents queries from failing immediately under high concurrency.
-
-### `NEONECT_SQLITE_CACHE_SIZE`
-- **Purpose**: Suggested SQLite page cache size.
-- **Unit**: Pages (if positive) or Kibibytes (if negative)
-- **Default**: `-32000` (approx 32 MiB)
-- **Safe meaning**: Controls memory footprint of the SQLite engine.
-
-### `NEONECT_SQLITE_MMAP_SIZE_BYTES`
-- **Purpose**: Maximum bytes SQLite is allowed to map via mmap.
-- **Unit**: Bytes
-- **Default**: `268435456` (256 MiB)
-- **Safe meaning**: Accelerates read performance at the expense of virtual memory space.
+### `NEONECT_IDLE_TIMEOUT`
+- **Required**: Optional
+- **Default**: `60`
+- **Unit**: Seconds
+- **Purpose**: HTTP keep-alive timeout.
 
 ### `NEONECT_REQUEST_CONTEXT_TIMEOUT_SECONDS`
-- **Purpose**: Global timeout enforced on HTTP request contexts.
-- **Unit**: Seconds
+- **Required**: Optional
 - **Default**: `30`
-- **Safe meaning**: Prevents stalled requests from permanently consuming resources.
+- **Unit**: Seconds
+- **Purpose**: Max duration for processing a single HTTP request context.
+
+### `NEONECT_MAX_AUTH_PER_SEC_IP`, `NEONECT_MAX_CONN_PER_IP`, `NEONECT_MAX_REQ_PER_SEC_IP`, `NEONECT_MAX_MSG_PER_SEC`, `NEONECT_MAX_DISCOVERY_PER_SEC`
+- **Required**: Optional
+- **Purpose**: Operational rate limits for abuse mitigation.
+
+---
+
+## 🌐 HTTP
+
+### `NEONECT_HTTP_MAX_BODY_BYTES`
+- **Required**: Optional
+- **Default**: 4194304 (4 MiB)
+- **Unit**: Bytes
+- **Purpose**: Enforces the maximum HTTP request body size globally.
+
+---
+
+## 🔌 WebSocket
+
+### `NEONECT_WS_MAX_MESSAGE_BYTES`
+- **Required**: Optional
+- **Default**: 4194304 (4 MiB)
+- **Unit**: Bytes
+- **Purpose**: Maximum read limit for incoming WebSocket frames.
 
 ### `NEONECT_WS_PING_PERIOD_SECONDS`
-- **Purpose**: Frequency of WebSocket ping frames sent to clients.
+- **Required**: Optional
+- **Default**: 30
 - **Unit**: Seconds
-- **Default**: `30`
-- **Safe meaning**: Keeps the connection alive and detects dead peers.
+- **Purpose**: Ping heartbeat interval.
 
 ### `NEONECT_WS_PONG_WAIT_SECONDS`
-- **Purpose**: Time allowed for a client to reply to a ping before connection termination.
+- **Required**: Optional
+- **Default**: 45
 - **Unit**: Seconds
-- **Default**: `45`
-- **Safe meaning**: Enforces active liveness. Must be strictly greater than NEONECT_WS_PING_PERIOD_SECONDS.
+- **Purpose**: Maximum time to wait for a pong response (Must exceed ping period).
 
-### `NEONECT_MAX_AUTH_PER_SEC_IP`
-- **Purpose**: Maximum authentication attempts per second per IP address.
-- **Unit**: Count/Second
-- **Default**: `5`
-- **Safe meaning**: Protects against brute-force attacks on authentication endpoints.
+### `NEONECT_MAX_GLOBAL_WEBSOCKETS`
+- **Required**: Optional
+- **Default**: 10000
+- **Unit**: Count
+- **Purpose**: Global cap on concurrent WebSocket connections.
+
+---
+
+## 📦 Mailbox / Relay
+
+### `NEONECT_MAX_ENVELOPE_BYTES`
+- **Required**: Optional
+- **Default**: 1048576 (1 MiB)
+- **Unit**: Bytes
+- **Purpose**: Maximum size of a stored encrypted relay envelope. This is the absolute limit for transporting arbitrary ciphertext (including chunked file attachments sent via standard messaging).
+
+### `NEONECT_MAX_MAILBOX_BYTES`
+- **Required**: Optional
+- **Default**: 52428800 (50 MiB)
+- **Unit**: Bytes
+- **Purpose**: Storage quota allocated per active mailbox.
+
+### `NEONECT_MAX_MAILBOX_MESSAGES`
+- **Required**: Optional
+- **Default**: 1000
+- **Unit**: Count
+- **Purpose**: Maximum number of envelopes queued in a mailbox.
+
+### `NEONECT_DELIVERY_BATCH_SIZE`
+- **Required**: Optional
+- **Default**: 100
+- **Unit**: Count
+- **Purpose**: Number of messages retrieved atomically during offline fanout.
+
+---
+
+## 🗄️ Database Tuning
+
+### `NEONECT_DB_MAX_OPEN_CONNS` (Default: 10)
+### `NEONECT_DB_MAX_IDLE_CONNS` (Default: 5)
+### `NEONECT_DB_CONN_MAX_LIFETIME_SECONDS` (Default: 3600)
+
+### `NEONECT_SQLITE_BUSY_TIMEOUT_MS`
+- **Required**: Optional
+- **Default**: 10000
+- **Unit**: Milliseconds
+- **Purpose**: Time SQLite waits for a lock before returning `SQLITE_BUSY`.
+
+### `NEONECT_SQLITE_CACHE_SIZE`
+- **Required**: Optional
+- **Default**: -32000
+- **Unit**: Pages (Negative = Kibibytes in SQLite)
+- **Purpose**: Memory allocated for SQLite caching.
+
+### `NEONECT_SQLITE_MMAP_SIZE_BYTES`
+- **Required**: Optional
+- **Default**: 268435456 (256 MiB)
+- **Unit**: Bytes
+- **Purpose**: Maximum memory-mapped I/O boundary.

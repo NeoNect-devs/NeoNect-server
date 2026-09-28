@@ -1,34 +1,49 @@
 # NeoNect Server
 
-NeoNect Server operates as a highly secure, blindly-routing relay node powering the NeoNect ecosystem.
+NeoNect Server is an encrypted blind relay for 1:1 messaging. It securely routes offline messages, file attachments (within configured envelope limits), and handles multi-device synchronizations without ever inspecting cryptographic plaintexts.
 
-## Project Purpose
-NeoNect fundamentally delivers encrypted payloads effortlessly bridging offline clients via asynchronous centralized mailboxes. It establishes a secure trust boundary asserting authentication restrictions, isolating active resources gracefully, mapping limits inherently over HTTP and real-time WebSockets without ever interpreting internal cryptographic plaintext boundaries.
+**Version:** 1.0.0
 
-## Architecture & Trust Model
-- **Cryptographic Blindness**: Designed fundamentally to act natively without cryptographic identity keys. The server exclusively transports opaque `ciphertext` mappings.
-- **Relay Mechanism**: Centralizes robust asynchronous SQLite operations limiting abuse intrinsically over strictly bounded mailbox queues.
-- **Authentication**: Protects connections dynamically leveraging cached internal `uid` restrictions actively executing explicit `ValidateDeviceOwnership` configurations natively securing endpoint structures.
+## 🚦 Start Here
+If you are new to the repository, please start with our beginner-friendly **[Getting Started Guide](docs/GETTING_STARTED.md)**. It will walk you from cloning the repository to running the local server.
 
-## Core Capabilities
-- Secure user registration, authentication, and transient session lifecycles.
-- Asynchronous Offline Envelopes securely persisted mapping strict `message_id` limits via protocol V2 bounding duplicates natively.
-- Robust fanout deliveries routing messages across device lists natively utilizing protocol V1 legacy boundaries.
-- Native WebSocket routing seamlessly draining active mailboxes securely into connected client boundaries gracefully utilizing synchronized limits cleanly.
+## 📦 Scope of v1.0.0
+NeoNect Server v1 intentionally focuses exclusively on:
+- 1:1 encrypted messaging.
+- Cryptographic blind-relay (the server does not possess user keys).
+- Offline delivery via SQLite persistence.
+- Multi-device sync architecture.
 
-## Documentation
-Complete architectural and client-integration manuals structurally reside inherently within the nested `docs/` repository boundary safely mapping execution limits deeply.
+*Note: Group chats, voice channels, video calls, and native multipart file upload APIs are strictly **NOT** implemented in v1.*
 
-- **[Detailed Documentation Index](docs/README.md)**
+## ⚙️ Quick Prerequisites
+- **Go 1.26.0+**
+- **Git**
+- Unix-like OS recommended
 
-## Development & Building
+## 🚀 Quick Start (Development)
 ```bash
-go build -o neonect-server ./cmd/server
+git clone https://github.com/NeoNect-devs/NeoNect-server
+cd NeoNect-server
+go mod tidy
+export NEONECT_BOOTSTRAP_KEY="12345678901234567890123456789012"
+export NEONECT_BIND_ADDR="127.0.0.1:8080"
+go run cmd/server/main.go
 ```
-Review the **[Development Guide](docs/DEVELOPMENT.md)** natively understanding testing operations structurally.
+*Health Check*: `curl http://127.0.0.1:8080/api/v1/health`
 
-## License
+*(By default, if NEONECT_BIND_ADDR is not set, the server binds to a random port via `0.0.0.0:0`)*
 
-NeoNect is licensed under the Apache License, Version 2.0.
+## 🛠️ Validation
+Run the test suite and static analysis:
+```bash
+go test -count=1 ./...
+go vet ./...
+```
 
-See the `LICENSE` file for the complete license text.
+## 📚 Documentation Map
+- **[Full Documentation Index](docs/README.md)**
+- **[Configuration & Environments](docs/ENVIRONMENT.md)**
+- **[Deployment Guide](deploy/README.md)**
+- **[Versioning](docs/VERSIONING.md)**
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)**
