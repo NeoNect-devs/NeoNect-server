@@ -93,3 +93,27 @@ func (hm *HandlerManager) GetPresence(w http.ResponseWriter, r *http.Request) {
 
 	hm.sendJSONResponse(w, PresenceResponse{Online: online})
 }
+
+type CapabilitiesLimits struct {
+	MaxHttpBodyBytes  int64 `json:"max_http_body_bytes"`
+	MaxEnvelopeBytes  int   `json:"max_envelope_bytes"`
+	MaxDevicesPerUser int   `json:"max_devices_per_user"`
+}
+
+type CapabilitiesResponse struct {
+	Status  string             `json:"status"`
+	Version int                `json:"version"`
+	Limits  CapabilitiesLimits `json:"limits"`
+}
+
+func (hm *HandlerManager) GetCapabilities(w http.ResponseWriter, r *http.Request) {
+	hm.sendJSONResponse(w, CapabilitiesResponse{
+		Status:  config.StatusSuccess,
+		Version: 1,
+		Limits: CapabilitiesLimits{
+			MaxHttpBodyBytes:  hm.AppConfig.HttpMaxBodyBytes,
+			MaxEnvelopeBytes:  hm.AppConfig.MaxEnvelopeBytes,
+			MaxDevicesPerUser: hm.AppConfig.MaxDevicesPerUser,
+		},
+	})
+}

@@ -146,6 +146,7 @@ func (app *App) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc(apiV1Prefix+"/devices", app.withMethod(http.MethodGet, app.Handlers.ListDevices))
 
 	mux.HandleFunc(apiV1Prefix+"/health", app.withMethod(http.MethodGet, app.Handlers.HealthCheck))
+	mux.HandleFunc(apiV1Prefix+"/capabilities", app.withMethod(http.MethodGet, app.Handlers.GetCapabilities))
 	mux.HandleFunc(apiV1Prefix+"/presence", app.withMethod(http.MethodGet, app.Handlers.GetPresence))
 
 	mux.HandleFunc(apiV1Prefix+"/relay/send", app.withMethod(http.MethodPost, app.Handlers.SendRelayMessage))

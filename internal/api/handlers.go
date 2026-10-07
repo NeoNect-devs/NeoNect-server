@@ -37,6 +37,7 @@ type HandlerManager struct {
 	Vault          *security.SystemVault
 	RateLimiter    *RequestRateLimiter
 	TrustedProxies []*net.IPNet
+	AppConfig      config.AppConfig
 }
 
 func NewHandlerManager(
@@ -64,5 +65,6 @@ func NewHandlerManager(
 		Vault:          vault,
 		RateLimiter:    NewRateLimiter(appConfig),
 		TrustedProxies: ParseTrustedProxies(trustedProxies),
+		AppConfig:      appConfig,
 	}
 }
