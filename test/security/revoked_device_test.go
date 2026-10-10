@@ -42,8 +42,8 @@ func TestRevokedDeviceCannotSend(t *testing.T) {
 	cookieRec := h.Login(t, "rvk_rec", "Password123!")
 	h.RegisterDevice(t, cookieRec, "dev_rvk_r")
 
-	h.AddFriend(t, cookieSender, "rvk_rec")
-	h.AddFriend(t, cookieRec, "rvk_sender")
+	h.SeedFriendship(t, cookieSender, "rvk_rec")
+	h.SeedFriendship(t, cookieRec, "rvk_sender")
 
 	cipher := base64.StdEncoding.EncodeToString([]byte("hello"))
 	resp1, _ := h.PostJSON(t, "/api/v1/relay/send", map[string]interface{}{

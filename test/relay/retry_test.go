@@ -18,8 +18,8 @@ func TestRetryBehavior(t *testing.T) {
 	cookieRecipient := h.Login(t, "retry_recipient", "Password123!")
 	h.RegisterDevice(t, cookieRecipient, "dev_rt_r1")
 
-	h.AddFriend(t, cookieSender, "retry_recipient")
-	h.AddFriend(t, cookieRecipient, "retry_sender")
+	h.SeedFriendship(t, cookieSender, "retry_recipient")
+	h.SeedFriendship(t, cookieRecipient, "retry_sender")
 
 	// Ensure no WS is connected so delivery fails natively
 

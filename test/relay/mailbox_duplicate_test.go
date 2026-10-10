@@ -23,11 +23,11 @@ func TestMailbox_DuplicateDifferentRecipient(t *testing.T) {
 	cookieRecB := h.Login(t, "dup_rec_b", "Password123!")
 	h.RegisterDevice(t, cookieRecB, "dev_rec_b")
 
-	h.AddFriend(t, cookieSender, "dup_rec_a")
-	h.AddFriend(t, cookieRecA, "dup_sender2")
+	h.SeedFriendship(t, cookieSender, "dup_rec_a")
+	h.SeedFriendship(t, cookieRecA, "dup_sender2")
 
-	h.AddFriend(t, cookieSender, "dup_rec_b")
-	h.AddFriend(t, cookieRecB, "dup_sender2")
+	h.SeedFriendship(t, cookieSender, "dup_rec_b")
+	h.SeedFriendship(t, cookieRecB, "dup_sender2")
 
 	// Submit once to rec_a
 	resp1, _ := h.PostJSON(t, "/api/v1/relay/send", map[string]interface{}{

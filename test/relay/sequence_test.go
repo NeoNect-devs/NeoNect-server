@@ -28,8 +28,8 @@ func TestSequenceUniqueness_Concurrent(t *testing.T) {
 		cookie := h.Login(t, u, "Password123!")
 		h.RegisterDevice(t, cookie, "dev_"+u)
 		sendCookies = append(sendCookies, cookie)
-		h.AddFriend(t, cookie, "seq_rec")
-		h.AddFriend(t, cookieRec, u)
+		h.SeedFriendship(t, cookie, "seq_rec")
+		h.SeedFriendship(t, cookieRec, u)
 	}
 
 	startCh := make(chan struct{})

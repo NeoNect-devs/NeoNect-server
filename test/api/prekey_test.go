@@ -279,9 +279,7 @@ func TestPrekeyClaim(t *testing.T) {
 	cookie2 := h.Login(t, "user2", "Password1234")
 
 	// Add friend
-	h.PostJSON(t, "/api/v1/friends", map[string]interface{}{
-		"username": "user1",
-	}, cookie2)
+	h.SeedFriendship(t, cookie2, "user1")
 
 	h.PostJSON(t, "/api/v1/device/register", map[string]interface{}{
 		"device_id":  "dev1",
@@ -348,7 +346,7 @@ func TestPrekeyClaimCombinations(t *testing.T) {
 	h.RegisterUser(t, "user2", "Password1234")
 	cookie2 := h.Login(t, "user2", "Password1234")
 
-	h.PostJSON(t, "/api/v1/friends", map[string]interface{}{"username": "user1"}, cookie2)
+	h.SeedFriendship(t, cookie2, "user1")
 
 	// Dev 1: Curve and PQ available
 	h.PostJSON(t, "/api/v1/device/register", map[string]interface{}{"device_id": "dev1", "public_key": "cHVibGljS2V5"}, cookie1)

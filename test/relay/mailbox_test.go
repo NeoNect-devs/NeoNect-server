@@ -23,8 +23,8 @@ func TestMailbox_SendAndPoll(t *testing.T) {
 	h.RegisterDevice(t, cookieRec, "dev_rec1")
 	h.RegisterDevice(t, cookieRec, "dev_rec2")
 
-	h.AddFriend(t, cookieSender, "mailbox_rec")
-	h.AddFriend(t, cookieRec, "mailbox_sender")
+	h.SeedFriendship(t, cookieSender, "mailbox_rec")
+	h.SeedFriendship(t, cookieRec, "mailbox_sender")
 
 	ciphertext := "c2VjcmV0IG1lc3NhZ2U=" // "secret message" in base64
 
@@ -85,8 +85,8 @@ func TestMailbox_DuplicateSubmission(t *testing.T) {
 	cookieRec := h.Login(t, "dup_rec", "Password123!")
 	h.RegisterDevice(t, cookieRec, "dev_rec")
 
-	h.AddFriend(t, cookieSender, "dup_rec")
-	h.AddFriend(t, cookieRec, "dup_sender")
+	h.SeedFriendship(t, cookieSender, "dup_rec")
+	h.SeedFriendship(t, cookieRec, "dup_sender")
 
 	ciphertext1 := base64.StdEncoding.EncodeToString([]byte("msg1"))
 	ciphertext2 := base64.StdEncoding.EncodeToString([]byte("msg2"))

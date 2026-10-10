@@ -19,8 +19,7 @@ func TestRelayFlow(t *testing.T) {
 	h.RegisterDevice(t, cookieRecipient, "recipient_dev")
 
 	// Make them friends
-	h.PostJSON(t, "/api/v1/friends", map[string]interface{}{"username": "recipient"}, cookieSender)
-	h.PostJSON(t, "/api/v1/friends", map[string]interface{}{"username": "sender"}, cookieRecipient)
+	h.SeedFriendship(t, cookieSender, "recipient")
 
 	// Send message
 	resp, _ := h.PostJSON(t, "/api/v1/relay/send", map[string]interface{}{

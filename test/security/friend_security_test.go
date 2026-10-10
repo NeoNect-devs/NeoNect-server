@@ -20,9 +20,9 @@ func TestFriendshipSecurity(t *testing.T) {
 
 	getFriendshipCount := func() int {
 		var count int
-		err := h.App.DB.DB().QueryRow("SELECT COUNT(*) FROM friendships").Scan(&count)
+		err := h.App.DB.DB().QueryRow("SELECT COUNT(*) FROM friend_requests").Scan(&count)
 		if err != nil {
-			t.Fatalf("Failed to count friendships: %v", err)
+			t.Fatalf("Failed to count friend_requests: %v", err)
 		}
 		return count
 	}

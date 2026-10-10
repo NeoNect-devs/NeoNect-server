@@ -57,7 +57,7 @@ func TestDatabase_InitializeAtomicity(t *testing.T) {
 
 	// Verify schema integrity after successful initialization
 	tablesToVerify := []string{
-		"users", "user_blocks", "delivery_queue", "friendships", // DatabaseSchema
+		"users", "user_blocks", "delivery_queue", "friendships", "friend_requests", // DatabaseSchema + Migration5
 		"devices",                                                                                    // Migration1
 		"signed_curve_prekeys", "one_time_curve_prekeys", "signed_pq_prekeys", "one_time_pq_prekeys", // Migration2
 		"idempotency_records", // Migration3

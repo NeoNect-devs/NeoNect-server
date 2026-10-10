@@ -21,8 +21,8 @@ func TestMailboxQuotaConcurrency(t *testing.T) {
 	cookieRec := h.Login(t, "quota_rec", "Password123!")
 	h.RegisterDevice(t, cookieRec, "dev_qr")
 
-	h.AddFriend(t, cookieSender, "quota_rec")
-	h.AddFriend(t, cookieRec, "quota_sender")
+	h.SeedFriendship(t, cookieSender, "quota_rec")
+	h.SeedFriendship(t, cookieRec, "quota_sender")
 
 	// Max messages is 1000. Let's send 990 sequentially to almost fill it.
 	for i := 0; i < 990; i++ {

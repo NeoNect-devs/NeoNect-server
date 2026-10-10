@@ -49,6 +49,10 @@ func TestFriendsAndDevicesEndpoints(t *testing.T) {
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("Expected 201, got %d", resp.StatusCode)
 	}
+	resp, _ = h.PostJSON(t, "/api/v1/friends/requests/accept", map[string]string{"username": "user_A"}, cookieB)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Expected 200, got %d", resp.StatusCode)
+	}
 
 	// Authenticated GET /api/v1/friends (Has friend B)
 	resp, data = h.GetJSON(t, "/api/v1/friends", cookieA)

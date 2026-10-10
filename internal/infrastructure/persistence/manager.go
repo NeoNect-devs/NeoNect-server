@@ -39,6 +39,11 @@ var Queries = struct {
 	CleanupSess            string
 	CreateFriendship       string
 	CheckFriendship        string
+	CreateFriendRequest    string
+	GetFriendRequestSender string
+	GetIncomingRequests    string
+	GetOutgoingRequests    string
+	DeleteFriendRequest    string
 	VerifyDb               string
 	PragmaJournal          string
 	PragmaSync             string
@@ -76,6 +81,11 @@ var Queries = struct {
 	CleanupSess:            "DELETE FROM user_blocks WHERE block_type = ? AND created_at < ?",
 	CreateFriendship:       "INSERT INTO friendships (user_id_1, user_id_2) VALUES (?, ?)",
 	CheckFriendship:        "SELECT EXISTS(SELECT 1 FROM friendships WHERE user_id_1 = ? AND user_id_2 = ?)",
+	CreateFriendRequest:    "INSERT INTO friend_requests (user_id_1, user_id_2, sender_id) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM friendships WHERE user_id_1 = ? AND user_id_2 = ?)",
+	GetFriendRequestSender: "SELECT sender_id FROM friend_requests WHERE user_id_1 = ? AND user_id_2 = ?",
+	GetIncomingRequests:    "SELECT u.identity_blob FROM friend_requests r JOIN users u ON u.id = r.sender_id WHERE (r.user_id_1 = ? OR r.user_id_2 = ?) AND r.sender_id != ?",
+	GetOutgoingRequests:    "SELECT u.identity_blob FROM friend_requests r JOIN users u ON u.id = CASE WHEN r.user_id_1 = r.sender_id THEN r.user_id_2 ELSE r.user_id_1 END WHERE r.sender_id = ?",
+	DeleteFriendRequest:    "DELETE FROM friend_requests WHERE user_id_1 = ? AND user_id_2 = ? AND sender_id = ?",
 	VerifyDb:               "SELECT 1",
 	PragmaJournal:          "PRAGMA journal_mode = WAL",
 	PragmaSync:             "PRAGMA synchronous = NORMAL",
@@ -121,6 +131,17 @@ const (
 		CHECK(user_id_1 < user_id_2),
 		FOREIGN KEY(user_id_1) REFERENCES users(id),
 		FOREIGN KEY(user_id_2) REFERENCES users(id)
+	);
+	CREATE TABLE IF NOT EXISTS friend_requests (
+		user_id_1 INTEGER NOT NULL,
+		user_id_2 INTEGER NOT NULL,
+		sender_id INTEGER NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY(user_id_1, user_id_2),
+		CHECK(user_id_1 < user_id_2),
+		CHECK(sender_id = user_id_1 OR sender_id = user_id_2),
+		FOREIGN KEY(user_id_1) REFERENCES users(id) ON DELETE CASCADE,
+		FOREIGN KEY(user_id_2) REFERENCES users(id) ON DELETE CASCADE
 	);
 	CREATE INDEX IF NOT EXISTS idx_user_silo_time ON user_blocks(user_id, block_type, sub_block_id, created_at DESC);
 	CREATE INDEX IF NOT EXISTS idx_session_lookup ON user_blocks(block_type, sub_block_id);
@@ -209,6 +230,19 @@ const (
 	ALTER TABLE delivery_queue ADD COLUMN sender_device_id TEXT;
 	ALTER TABLE delivery_queue ADD COLUMN protocol_version INTEGER DEFAULT 1;
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_delivery_queue_msg ON delivery_queue(message_id) WHERE message_id IS NOT NULL;
+	`
+	Migration5 = `
+	CREATE TABLE IF NOT EXISTS friend_requests (
+		user_id_1 INTEGER NOT NULL,
+		user_id_2 INTEGER NOT NULL,
+		sender_id INTEGER NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY(user_id_1, user_id_2),
+		CHECK(user_id_1 < user_id_2),
+		CHECK(sender_id = user_id_1 OR sender_id = user_id_2),
+		FOREIGN KEY(user_id_1) REFERENCES users(id) ON DELETE CASCADE,
+		FOREIGN KEY(user_id_2) REFERENCES users(id) ON DELETE CASCADE
+	);
 	`
 )
 
@@ -308,6 +342,10 @@ func (m *Database) Initialize(ctx context.Context) error {
 		if _, err := tx.ExecContext(ctx, stmt); err != nil {
 			return err
 		}
+	}
+
+	if _, err := tx.ExecContext(ctx, Migration5); err != nil {
+		return err
 	}
 
 	return tx.Commit()

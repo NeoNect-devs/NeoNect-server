@@ -1,6 +1,14 @@
 package persistence
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+var (
+	ErrDuplicateRecord = errors.New("persistence: duplicate record")
+	ErrRecordNotFound  = errors.New("persistence: record not found")
+)
 
 type UserRepository interface {
 	IsUsernameTaken(ctx context.Context, hash string) (bool, error)
@@ -11,10 +19,17 @@ type UserRepository interface {
 }
 
 type FriendshipRepository interface {
-	CreateFriendship(ctx context.Context, userID1, userID2 int64) error
 	CheckFriendship(ctx context.Context, userID1, userID2 int64) (bool, error)
 	GetFriendsList(ctx context.Context, userID int64) ([]string, error)
 	RemoveFriendship(ctx context.Context, userID1, userID2 int64) error
+
+	CreateFriendRequest(ctx context.Context, senderID, receiverID int64) error
+	GetFriendRequestSender(ctx context.Context, userID1, userID2 int64) (int64, error)
+	GetIncomingRequests(ctx context.Context, userID int64) ([]string, error)
+	GetOutgoingRequests(ctx context.Context, userID int64) ([]string, error)
+	AcceptFriendRequest(ctx context.Context, senderID, recipientID int64) error
+	DeclineFriendRequest(ctx context.Context, senderID, recipientID int64) error
+	CancelFriendRequest(ctx context.Context, senderID, recipientID int64) error
 }
 
 type SessionRepository interface {

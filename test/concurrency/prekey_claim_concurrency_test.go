@@ -44,9 +44,7 @@ func runConcurrencyTest(t *testing.T, h *harness.Harness, devID string, ownerCoo
 		claimerCookies = append(claimerCookies, c)
 		// Add friend to owner
 		ownerName := fmt.Sprintf("owner_%s", devID)
-		h.PostJSON(t, "/api/v1/friends", map[string]interface{}{
-			"username": ownerName,
-		}, c)
+		h.SeedFriendship(t, c, ownerName)
 	}
 
 	startCh := make(chan struct{})

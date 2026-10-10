@@ -160,4 +160,8 @@ func (app *App) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc(apiV1Prefix+"/keys/claim", app.withMethod(http.MethodPost, app.Handlers.ClaimPrekeys))
 
 	mux.HandleFunc(apiV1Prefix+"/friends", app.Handlers.HandleFriendsV1)
+
+	mux.HandleFunc(apiV1Prefix+"/friends/requests", app.Handlers.HandleRequestsV1)
+	mux.HandleFunc(apiV1Prefix+"/friends/requests/accept", app.withMethod(http.MethodPost, app.Handlers.AcceptRequest))
+	mux.HandleFunc(apiV1Prefix+"/friends/requests/decline", app.withMethod(http.MethodPost, app.Handlers.DeclineRequest))
 }

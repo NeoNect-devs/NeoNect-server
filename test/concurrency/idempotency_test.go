@@ -61,7 +61,7 @@ func TestIdempotency_A_20ConcurrentIdentical(t *testing.T) {
 	claimerName := "claimer_A"
 	h.RegisterUser(t, claimerName, "Password1234")
 	claimerCookie := h.Login(t, claimerName, "Password1234")
-	h.PostJSON(t, "/api/v1/friends", map[string]interface{}{"username": "owner_A"}, claimerCookie)
+	h.SeedFriendship(t, claimerCookie, "owner_A")
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -149,7 +149,7 @@ func TestIdempotency_B_ConcurrentConflicting(t *testing.T) {
 	claimerName := "claimer_B"
 	h.RegisterUser(t, claimerName, "Password1234")
 	claimerCookie := h.Login(t, claimerName, "Password1234")
-	h.PostJSON(t, "/api/v1/friends", map[string]interface{}{"username": "owner_B"}, claimerCookie)
+	h.SeedFriendship(t, claimerCookie, "owner_B")
 
 	key := "idemp-key-B"
 
@@ -174,11 +174,11 @@ func TestIdempotency_C_DifferentUsersSameKey(t *testing.T) {
 
 	h.RegisterUser(t, "claimer_C1", "Password1234")
 	c1 := h.Login(t, "claimer_C1", "Password1234")
-	h.PostJSON(t, "/api/v1/friends", map[string]interface{}{"username": "owner_C"}, c1)
+	h.SeedFriendship(t, c1, "owner_C")
 
 	h.RegisterUser(t, "claimer_C2", "Password1234")
 	c2 := h.Login(t, "claimer_C2", "Password1234")
-	h.PostJSON(t, "/api/v1/friends", map[string]interface{}{"username": "owner_C"}, c2)
+	h.SeedFriendship(t, c2, "owner_C")
 
 	key := "idemp-key-C"
 
@@ -212,7 +212,7 @@ func TestIdempotency_D_ResponseLoss(t *testing.T) {
 	claimerName := "claimer_D"
 	h.RegisterUser(t, claimerName, "Password1234")
 	claimerCookie := h.Login(t, claimerName, "Password1234")
-	h.PostJSON(t, "/api/v1/friends", map[string]interface{}{"username": "owner_D"}, claimerCookie)
+	h.SeedFriendship(t, claimerCookie, "owner_D")
 
 	key := "idemp-key-D"
 

@@ -19,8 +19,8 @@ func TestE2EPayloadOpacityAndIntegrity(t *testing.T) {
 	h.RegisterUser(t, "e2e_recipient", "Password1234")
 	cookieRecipient := h.Login(t, "e2e_recipient", "Password1234")
 	h.RegisterDevice(t, cookieRecipient, "e2e_recipient_dev")
-	h.AddFriend(t, cookieSender, "e2e_recipient")
-	h.AddFriend(t, cookieRecipient, "e2e_sender")
+	h.SeedFriendship(t, cookieSender, "e2e_recipient")
+	h.SeedFriendship(t, cookieRecipient, "e2e_sender")
 
 	// Create an arbitrary binary payload to verify that the server does not
 	// attempt to parse or modify it (Opacity & Integrity)

@@ -19,8 +19,8 @@ func TestProtocolVersionBoundary(t *testing.T) {
 	cookieRec := h.Login(t, "pb_rec", "Password123!")
 	h.RegisterDevice(t, cookieRec, "dev_pb_r")
 
-	h.AddFriend(t, cookieSender, "pb_rec")
-	h.AddFriend(t, cookieRec, "pb_sender")
+	h.SeedFriendship(t, cookieSender, "pb_rec")
+	h.SeedFriendship(t, cookieRec, "pb_sender")
 
 	cipher := base64.StdEncoding.EncodeToString([]byte("test"))
 

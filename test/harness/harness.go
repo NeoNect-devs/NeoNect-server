@@ -167,7 +167,7 @@ func Setup(t *testing.T) *Harness {
 	return h
 }
 
-func (h *Harness) PostJSON(t *testing.T, endpoint string, payload interface{}, cookie string) (*http.Response, map[string]interface{}) {
+func (h *Harness) PostJSON(t testing.TB, endpoint string, payload interface{}, cookie string) (*http.Response, map[string]interface{}) {
 	t.Helper()
 	body, _ := json.Marshal(payload)
 	req, _ := http.NewRequest(http.MethodPost, h.BaseURL+endpoint, bytes.NewBuffer(body))
@@ -249,10 +249,88 @@ func (h *Harness) DialWS(t *testing.T, cookie, deviceID string) *websocket.Conn 
 	return conn
 }
 
-func (h *Harness) AddFriend(t *testing.T, cookie, targetUsername string) {
+func (h *Harness) AddFriend(t testing.TB, cookie, targetUsername string) {
 	t.Helper()
 	resp, _ := h.PostJSON(t, "/api/v1/friends", map[string]string{"username": targetUsername}, cookie)
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
-		t.Fatalf("Failed to add friend: %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("Failed to add friend: expected 201 Created, got %d", resp.StatusCode)
 	}
+}
+
+func (h *Harness) SeedFriendshipErr(cookie, targetUsername string) error {
+	senderID, err := h.App.SessionRepo.GetUserIdBySession(context.Background(), cookie)
+	if err != nil {
+		return fmt.Errorf("failed to find session for cookie: %v", err)
+	}
+
+	targetHash := security.ComputeHash(targetUsername)
+	var targetID int64
+	err = h.App.DB.DB().QueryRow("SELECT id FROM users WHERE username_hash = ?", targetHash).Scan(&targetID)
+	if err != nil {
+		return fmt.Errorf("failed to find target user %s: %v", targetUsername, err)
+	}
+
+	u1, u2 := senderID, targetID
+	if u1 > u2 {
+		u1, u2 = u2, u1
+	}
+
+	// Check if a pending request already exists.
+	var pendingCount int
+	err = h.App.DB.DB().QueryRow("SELECT COUNT(*) FROM friend_requests WHERE user_id_1 = ? AND user_id_2 = ?", u1, u2).Scan(&pendingCount)
+	if err != nil {
+		return fmt.Errorf("failed to query pending requests: %v", err)
+	}
+	if pendingCount > 0 {
+		return fmt.Errorf("fixture conflict: a pending request already exists for user pair (%d, %d)", u1, u2)
+	}
+
+	_, err = h.App.DB.DB().Exec("INSERT INTO friendships (user_id_1, user_id_2) VALUES (?, ?) ON CONFLICT(user_id_1, user_id_2) DO NOTHING", u1, u2)
+	if err != nil {
+		return fmt.Errorf("failed to insert friendship: %v", err)
+	}
+
+	// Explicitly verify the resulting friendship state.
+	var friendCount int
+	err = h.App.DB.DB().QueryRow("SELECT COUNT(*) FROM friendships WHERE user_id_1 = ? AND user_id_2 = ?", u1, u2).Scan(&friendCount)
+	if err != nil || friendCount != 1 {
+		return fmt.Errorf("failed to verify resulting friendship state: err=%v, count=%d", err, friendCount)
+	}
+	return nil
+}
+
+func (h *Harness) SeedFriendship(t testing.TB, cookie, targetUsername string) {
+	t.Helper()
+	if err := h.SeedFriendshipErr(cookie, targetUsername); err != nil {
+		t.Fatalf("SeedFriendship error: %v", err)
+	}
+}
+
+func (h *Harness) DeleteJSON(t *testing.T, endpoint string, payload interface{}, cookie string) (*http.Response, map[string]interface{}) {
+	t.Helper()
+	var body []byte
+	if payload != nil {
+		body, _ = json.Marshal(payload)
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, h.BaseURL+endpoint, bytes.NewBuffer(body))
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if cookie != "" {
+		req.AddCookie(&http.Cookie{Name: "neonect_sid", Value: cookie, Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	}
+
+	resp, err := h.Client.Do(req)
+	if err != nil {
+		t.Fatalf("Request failed: %v", err)
+	}
+
+	var res map[string]interface{}
+	if resp.ContentLength != 0 && resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusForbidden {
+		_ = json.NewDecoder(resp.Body).Decode(&res)
+	}
+	resp.Body.Close()
+	return resp, res
 }

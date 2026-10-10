@@ -20,8 +20,8 @@ func TestAckRaceBehavior(t *testing.T) {
 	h.RegisterDevice(t, cookieRecipient, "dev_ack_r1")
 	h.RegisterDevice(t, cookieRecipient, "dev_ack_r2")
 
-	h.AddFriend(t, cookieSender, "ack_race_recipient")
-	h.AddFriend(t, cookieRecipient, "ack_race_sender")
+	h.SeedFriendship(t, cookieSender, "ack_race_recipient")
+	h.SeedFriendship(t, cookieRecipient, "ack_race_sender")
 
 	// Send message
 	h.PostJSON(t, "/api/v1/relay/send", map[string]interface{}{

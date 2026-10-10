@@ -32,8 +32,7 @@ func TestWebSocket_SlowClientIsolation(t *testing.T) {
 	h.RegisterDevice(t, cookieNew, "dev_new")
 
 	// Make them friends so they can message
-	h.PostJSON(t, "/api/v1/friends", map[string]interface{}{"username": "user_healthy"}, cookieSlow)
-	h.PostJSON(t, "/api/v1/friends", map[string]interface{}{"username": "user_slow"}, cookieHealthy)
+	h.SeedFriendship(t, cookieSlow, "user_healthy")
 
 	// 1. Client A (slow). We use raw TCP to cause backpressure.
 	u, _ := url.Parse(h.BaseURL)

@@ -23,8 +23,8 @@ func TestMailboxQuotaV1(t *testing.T) {
 	h.RegisterDevice(t, cookieRec, "dev_qr_v1_1")
 	h.RegisterDevice(t, cookieRec, "dev_qr_v1_2")
 
-	h.AddFriend(t, cookieSender, "quota_rec_v1")
-	h.AddFriend(t, cookieRec, "quota_sender_v1")
+	h.SeedFriendship(t, cookieSender, "quota_rec_v1")
+	h.SeedFriendship(t, cookieRec, "quota_sender_v1")
 
 	cipher := base64.StdEncoding.EncodeToString([]byte("initial message"))
 	resp, _ := h.PostJSON(t, "/api/v1/relay/send", map[string]interface{}{
@@ -137,8 +137,8 @@ func TestMailboxQuotaV1Bytes(t *testing.T) {
 	cookieRec := h.Login(t, "quota_rec_bytes", "Password123!")
 	h.RegisterDevice(t, cookieRec, "dev_qr_b")
 
-	h.AddFriend(t, cookieSender, "quota_rec_bytes")
-	h.AddFriend(t, cookieRec, "quota_sender_bytes")
+	h.SeedFriendship(t, cookieSender, "quota_rec_bytes")
+	h.SeedFriendship(t, cookieRec, "quota_sender_bytes")
 
 	// Payload is exactly 700KB *before* base64. After base64 it's exactly 933,336 bytes.
 	// This fits comfortably within the 1MB maxEnvelopeBytes constraint.
