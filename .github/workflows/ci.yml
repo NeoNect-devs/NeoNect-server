@@ -31,8 +31,17 @@ jobs:
 
       - name: Resolve & Verify Dependencies
         run: |
+          BACKUP_DIR="${RUNNER_TEMP:-$(mktemp -d)}"
+          cp go.mod "$BACKUP_DIR/go.mod.orig"
+
           go mod tidy
-          git diff --exit-code -- go.mod
+
+          if ! cmp -s "$BACKUP_DIR/go.mod.orig" go.mod; then
+            echo "Error: 'go mod tidy' unexpectedly modified go.mod:"
+            diff -u "$BACKUP_DIR/go.mod.orig" go.mod || true
+            exit 1
+          fi
+
           go mod verify
 
       - name: Determine Base Commit Range
