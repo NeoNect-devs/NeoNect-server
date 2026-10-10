@@ -31,7 +31,8 @@ jobs:
 
       - name: Resolve & Verify Dependencies
         run: |
-          go mod download
+          go mod tidy
+          git diff --exit-code -- go.mod
           go mod verify
 
       - name: Determine Base Commit Range
