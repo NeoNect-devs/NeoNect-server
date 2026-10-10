@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build, Vet & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.9'
+          cache: true
+          cache-dependency-path: 'go.mod'
+
+      - name: Resolve & Verify Dependencies
+        run: |
+          go mod download
+          go mod verify
+
+      - name: Determine Base Commit Range
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_REF="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE_REF="${{ github.event.before }}"
+          fi
+
+          if [ -n "$BASE_REF" ] && [ "$BASE_REF" != "0000000000000000000000000000000000000000" ]; then
+            if ! git rev-parse --verify "$BASE_REF^{commit}" >/dev/null 2>&1; then
+              git fetch origin "$BASE_REF" --depth=1 >/dev/null 2>&1 || true
+            fi
+          fi
+
+          if [ -z "$BASE_REF" ] || [ "$BASE_REF" = "0000000000000000000000000000000000000000" ] || ! git rev-parse --verify "$BASE_REF^{commit}" >/dev/null 2>&1; then
+            if git rev-parse --verify HEAD~1^{commit} >/dev/null 2>&1; then
+              BASE_REF="HEAD~1"
+            else
+              BASE_REF=$(git hash-object -t tree /dev/null)
+            fi
+          fi
+
+          echo "BASE_REF=$BASE_REF" >> "$GITHUB_ENV"
+          echo "Base commit range resolved to: $BASE_REF..HEAD"
+
+      - name: Verify Code Formatting (Changed Files)
+        run: |
+          TARGET_REF="${BASE_REF:-HEAD~1}"
+          CHANGED_GO=$(git diff --name-only --diff-filter=d "$TARGET_REF"..HEAD | grep '\.go$' || true)
+          if [ -n "$CHANGED_GO" ]; then
+            EXISTING_GO=""
+            for f in $CHANGED_GO; do
+              if [ -f "$f" ]; then
+                EXISTING_GO="$EXISTING_GO $f"
+              fi
+            done
+            if [ -n "$EXISTING_GO" ]; then
+              UNFORMATTED=$(echo "$EXISTING_GO" | xargs gofmt -s -l)
+              if [ -n "$UNFORMATTED" ]; then
+                echo "The following changed files require gofmt -s formatting:"
+                echo "$UNFORMATTED"
+                exit 1
+              fi
+            fi
+          fi
+
+      - name: Verify Trailing Whitespace (Changed Lines)
+        run: |
+          TARGET_REF="${BASE_REF:-HEAD~1}"
+          git diff --check "$TARGET_REF"..HEAD
+
+      - name: Run Go Vet
+        run: go vet ./...
+
+      - name: Run Full Test Suite
+        run: go test -v -count=1 ./...
+
+      - name: Run Race Detector
+        run: go test -race -count=1 ./...
+
+      - name: Run Vulnerability Scanner (Govulncheck)
+        run: |
+          TOOLS_DIR="$(mktemp -d)"
+          trap 'rm -rf "$TOOLS_DIR"' EXIT
+          GOBIN="$TOOLS_DIR" go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          "$TOOLS_DIR/govulncheck" ./...
